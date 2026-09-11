@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+.vs/
+*.suo
+
+# Build output
+artifacts/
+publish/
+
+# Runtime data (файловые сторы: rbac/automation/шаблоны/аудит)
+**/App_Data/
+
+# Secrets / config
+.env
+*.env
+appsettings.*.local.json
+appsettings.Development.json
+secrets.json
+
+# Test / coverage
+[Tt]est[Rr]esults/
+coverage/
+*.trx
+
+# OS / editor
+.idea/
+*.swp
+Thumbs.db
+.DS_Store

@@ -18,9 +18,17 @@ $sam = ($u -split '\\')[-1]
 $netbios = ($u -split '\\')[0].Split('.')[0]
 $aclUser = "$netbios\$sam"
 
-# 1) copy publish -> inetpub
+# 0) stop existing pool/site to release file locks (иначе robocopy виснет на залоченных DLL)
+Import-Module WebAdministration -ErrorAction SilentlyContinue
+if (Test-Path "IIS:\AppPools\$pool") { Stop-WebAppPool -Name $pool -ErrorAction SilentlyContinue }
+if (Test-Path "IIS:\Sites\$site")   { Stop-Website -Name $site -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 2
+Get-Process w3wp -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dst*" -or $true } | Out-Null
+Log "stopped pool/site (if existed)"
+
+# 1) copy publish -> inetpub (ограниченные ретраи, чтобы не виснуть на локах)
 New-Item -ItemType Directory -Force -Path $dst | Out-Null
-robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+robocopy $src $dst /MIR /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
 Log "copied publish -> $dst (robocopy rc=$LASTEXITCODE)"
 New-Item -ItemType Directory -Force -Path "$dst\logs" | Out-Null
 New-Item -ItemType Directory -Force -Path "$dst\App_Data" | Out-Null
