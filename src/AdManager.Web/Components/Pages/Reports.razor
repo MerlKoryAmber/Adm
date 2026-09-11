@@ -1,0 +1,227 @@
+@page "/reports"
+@using Microsoft.JSInterop
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Reports — admanager</PageTitle>
+<h1>Reports</h1>
+<p class="hint">Prebuilt read-only reports over the domain directory (subtree of <code>@Ui.BaseDn</code>). Select a report, filter, and export to CSV.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="body-split" style="display:flex; gap:16px; align-items:flex-start">
+
+    <aside class="reportlist" style="flex:0 0 240px; display:flex; flex-direction:column; gap:6px">
+        @foreach (var r in Catalog)
+        {
+            <button class="linkbtn @(r.Key == current.Key ? "badge ok" : "")"
+                    style="text-align:left; padding:8px 10px; border:1px solid var(--border,#2a2a2a); border-radius:6px; @(r.Key == current.Key ? "font-weight:600" : "")"
+                    @onclick="() => Select(r)">@r.Title</button>
+        }
+    </aside>
+
+    <section style="flex:1 1 auto; min-width:0">
+        <div class="toolbar">
+            <strong>@current.Title</strong>
+            <span class="grow"></span>
+            <input class="searchbox" type="text" placeholder="Filter name / account / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+            <button @onclick="Load">Refresh</button>
+            <button @onclick="ExportCsv" disabled="@(users is null)">Export CSV</button>
+        </div>
+        <p class="hint">@current.Hint</p>
+
+        @if (users is null)
+        {
+            <p>Loading directory…</p>
+        }
+        else if (busy)
+        {
+            <p>Querying per-account attributes…</p>
+        }
+        else
+        {
+            var rows = Rows();
+            var filtered = Filter(rows);
+            var total = filtered.Count;
+            var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+            if (page >= pages) page = pages - 1;
+            var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+            <div class="gridpanel">
+                <div style="overflow-x:auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Display name</th><th>Account</th><th>UPN</th><th>Email</th><th>Status</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var u in pageItems)
+                            {
+                                <tr>
+                                    <td>@u.DisplayName</td>
+                                    <td>@u.SamAccountName</td>
+                                    <td>@(u.Upn ?? "—")</td>
+                                    <td>@(string.IsNullOrWhiteSpace(u.Mail) ? "—" : u.Mail)</td>
+                                    <td>
+                                        <span class="badge @(u.Enabled ? "ok" : "off")">@(u.Enabled ? "Enabled" : "Disabled")</span>
+                                        @if (u.LockedOut) { <span class="badge warn">Locked</span> }
+                                    </td>
+                                    <td><button class="linkbtn" @onclick="() => Modify(u)">Modify ▸</button></td>
+                                </tr>
+                            }
+                            @if (pageItems.Count == 0)
+                            {
+                                <tr><td colspan="6" class="muted">No accounts match this report.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="pager">
+                <span>@total account(s)</span>
+                <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
+                <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+                <span>Page @(page + 1) / @pages</span>
+                <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
+                <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private const int PageSize = 50;
+    private const int UF_PASSWORD_NEVER_EXPIRES = 0x10000;
+
+    private sealed record ReportDef(string Key, string Title, string Hint, bool NeedsAttrs);
+
+    private static readonly ReportDef[] Catalog =
+    {
+        new("all",       "All users",              "Every user account (enabled and disabled) in the domain subtree.", false),
+        new("disabled",  "Disabled users",         "Accounts where Enabled = false.", false),
+        new("locked",    "Locked-out users",       "Accounts currently locked out (lockoutTime set).", false),
+        new("noemail",   "Users without email",    "Accounts with an empty mail attribute.", false),
+        new("nomanager", "Users without manager",  "Accounts with an empty manager attribute — queried per account, may take a moment.", true),
+        new("pne",       "Password never expires", "Accounts with the userAccountControl PASSWORD_NEVER_EXPIRES (0x10000) flag — queried per account.", true),
+    };
+
+    private List<AdUserSummary>? users;
+    private readonly Dictionary<string, (string? Manager, int Uac)> extra = new(StringComparer.OrdinalIgnoreCase);
+    private bool enriched;
+    private ReportDef current = Catalog[0];
+    private string search = "";
+    private int page;
+    private bool busy;
+    private string? banner; private bool ok;
+    private IJSObjectReference? module;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            users = null; extra.Clear(); enriched = false; page = 0; banner = null;
+            users = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList();
+            if (current.NeedsAttrs) await EnrichAsync();
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task Select(ReportDef r)
+    {
+        current = r; page = 0; search = "";
+        if (r.NeedsAttrs && users is not null && !enriched) await EnrichAsync();
+    }
+
+    // Дозагрузка per-account атрибутов (manager, userAccountControl) одним проходом.
+    private async Task EnrichAsync()
+    {
+        if (users is null || enriched) return;
+        busy = true; StateHasChanged();
+        try
+        {
+            foreach (var u in users)
+            {
+                var det = await Dir.GetObjectAsync(u.Dn, new[] { "manager", "userAccountControl" });
+                var mgr = det?.Attributes.GetValueOrDefault("manager");
+                var uac = int.TryParse(det?.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
+                extra[u.Dn] = (mgr, uac);
+            }
+            enriched = true;
+        }
+        catch (Exception ex) { ok = false; banner = "Error while querying attributes: " + ex.Message; }
+        finally { busy = false; }
+    }
+
+    private IEnumerable<AdUserSummary> Rows() => current.Key switch
+    {
+        "disabled"  => users!.Where(u => !u.Enabled),
+        "locked"    => users!.Where(u => u.LockedOut),
+        "noemail"   => users!.Where(u => string.IsNullOrWhiteSpace(u.Mail)),
+        "nomanager" => users!.Where(u => string.IsNullOrWhiteSpace(extra.GetValueOrDefault(u.Dn).Manager)),
+        "pne"       => users!.Where(u => (extra.GetValueOrDefault(u.Dn).Uac & UF_PASSWORD_NEVER_EXPIRES) != 0),
+        _           => users!,
+    };
+
+    private List<AdUserSummary> Filter(IEnumerable<AdUserSummary> src)
+    {
+        var q = src;
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(u =>
+                (u.DisplayName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.Upn?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
+    }
+
+    private void Modify(AdUserSummary u) => Nav.NavigateTo($"users/modify?dn={Uri.EscapeDataString(u.Dn)}");
+
+    private async Task ExportCsv()
+    {
+        if (users is null) return;
+        var rows = Filter(Rows());
+        var sb = new System.Text.StringBuilder();
+        sb.Append("DisplayName,SamAccountName,UPN,Email,Enabled,LockedOut\r\n");
+        foreach (var u in rows)
+        {
+            sb.Append(Csv(u.DisplayName)).Append(',')
+              .Append(Csv(u.SamAccountName)).Append(',')
+              .Append(Csv(u.Upn)).Append(',')
+              .Append(Csv(u.Mail)).Append(',')
+              .Append(u.Enabled ? "Enabled" : "Disabled").Append(',')
+              .Append(u.LockedOut ? "Locked" : "").Append("\r\n");
+        }
+        var name = $"report-{current.Key}-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Reports.razor.js");
+        await module.InvokeVoidAsync("downloadCsv", name, sb.ToString());
+    }
+
+    // RFC 4180: заключаем в кавычки, если есть запятая/кавычка/перевод строки; кавычки удваиваем.
+    private static string Csv(string? value)
+    {
+        var s = value ?? "";
+        if (s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) < 0) return s;
+        return "\"" + s.Replace("\"", "\"\"") + "\"";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); } catch { /* circuit down */ }
+        }
+    }
+}
