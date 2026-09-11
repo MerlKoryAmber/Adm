@@ -47,8 +47,8 @@ Web ─► Infrastructure.* (DI-композиция)
 |-------|------------|
 | `/` Home | обзор. |
 | `/users` | Users: полноширинный грид всех пользователей домена, поиск + фильтры Locked/Disabled only + пагинация (50/стр), **bulk** (enable/disable/unlock/reset pwd/move/delete), «Modify ▸» на строке. |
-| `/users/modify` | правка атрибутов (табы General/Account/Address/Telephones/Organization/Profile) + account options. |
-| `/users/create` | создание пользователя, табовая форма (как modify) + целевой OU. |
+| `/users/modify` | правка атрибутов (табы) + account options; **селектор Layout template** (Modify-шаблоны), иначе `TemplateDefaults.Modify()`. |
+| `/users/create` | создание пользователя, табовая форма + целевой OU; **селектор Layout template** (Create-шаблоны), иначе `TemplateDefaults.Create()`. |
 | `/users/bulk` | массовое создание из CSV. |
 | `/templates`, `/templates/edit` | **Form templates**: список (edit/copy/delete) + Layout-редактор (Field Tray → вкладки, переименование/добавление/перемещение вкладок, ↑↓ полей). Store — `App_Data/user-templates.json`. |
 | `/search` | Advanced search по атрибутам. |

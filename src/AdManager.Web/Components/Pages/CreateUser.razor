@@ -1,6 +1,7 @@
 @page "/users/create"
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
+@inject IUserTemplateStore Templates
 @inject UiOptions Ui
 @inject NavigationManager Nav
 
@@ -12,83 +13,75 @@
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="toolbar" style="max-width:640px">
-    <label style="margin:0">Target OU</label>
-    <select @bind="ouDn" class="grow">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
+<div class="panel" style="max-width:660px">
+    <div class="grid2">
+        <div>
+            <label>Target OU</label>
+            <select @bind="ouDn">
+                <option value="@Ui.BaseDn">(domain root)</option>
+                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+                {
+                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label>Layout template</label>
+            <select @bind="templateSel" @bind:after="OnTemplateChange">
+                <option value="">(default)</option>
+                @foreach (var t in templates)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+        </div>
+    </div>
 </div>
 
 <div class="tabbar">
-    @foreach (var t in Tabs)
+    @for (int i = 0; i < Layout.Count; i++)
     {
-        <button class="tabbtn @(tab == t ? "on" : null)" @onclick="() => tab = t">@t</button>
+        var idx = i;
+        <button class="tabbtn @(sel == idx ? "on" : null)" @onclick="() => sel = idx">@Layout[idx].Title</button>
     }
 </div>
 
-<div class="panel" style="max-width:640px">
-    @if (tab == "General")
+<div class="panel" style="max-width:660px">
+    @foreach (var key in CurrentTab.Fields)
     {
-        @Field("First name", "givenName")
-        @Field("Initials", "initials")
-        @Field("Last name", "sn")
-        @Field("Display name", "displayName")
-        <div class="hint">CN объекта. Если пусто — берётся sAMAccountName.</div>
-        @Field("Description", "description")
-        @Field("Office", "physicalDeliveryOfficeName")
-        @Field("Telephone", "telephoneNumber")
-        @Field("Email", "mail")
-        @Field("Web page", "wWWHomePage")
-    }
-    else if (tab == "Account")
-    {
-        <label>SAM account name *</label>
-        <input type="text" @bind="sam" placeholder="j.doe" />
-        <label>User principal name</label>
-        <input type="text" @bind="upnField" placeholder="@Upn" />
-        <div class="hint">Если пусто — <code>@Upn</code>.</div>
-        <label>Initial password</label>
-        <input type="password" @bind="password" />
-        <div class="hint">Нужен для включённой учётки; по политике домена.</div>
-        <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
-        <div class="checkbox"><input type="checkbox" id="mc" @bind="mustChange" /><label for="mc">Must change password at next logon</label></div>
-    }
-    else if (tab == "Address")
-    {
-        @Field("Street", "streetAddress")
-        @Field("P.O. Box", "postOfficeBox")
-        @Field("City", "l")
-        @Field("State/Province", "st")
-        @Field("Zip/Postal code", "postalCode")
-        @Field("Country/Region", "co")
-        @Field("Country code (ISO2)", "c")
-    }
-    else if (tab == "Telephones")
-    {
-        @Field("Home", "homePhone")
-        @Field("Pager", "pager")
-        @Field("Mobile", "mobile")
-        @Field("Fax", "facsimileTelephoneNumber")
-        @Field("IP phone", "ipPhone")
-        @Field("Notes", "info")
-    }
-    else if (tab == "Organization")
-    {
-        @Field("Title", "title")
-        @Field("Department", "department")
-        @Field("Company", "company")
-        @Field("Manager (DN)", "manager")
-    }
-    else if (tab == "Profile")
-    {
-        @Field("Profile path", "profilePath")
-        @Field("Logon script", "scriptPath")
-        @Field("Home folder (path)", "homeDirectory")
-        @Field("Home drive", "homeDrive")
+        @if (key == "sAMAccountName")
+        {
+            <label>SAM account name *</label>
+            <input type="text" @bind="sam" placeholder="j.doe" />
+        }
+        else if (key == "__password")
+        {
+            <label>Password</label>
+            <input type="password" @bind="password" />
+            <div class="hint">Needed for an enabled account; per domain policy.</div>
+        }
+        else if (key == "__enabled")
+        {
+            <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
+        }
+        else if (key == "__mustChange")
+        {
+            <div class="checkbox"><input type="checkbox" id="mc" @bind="mustChange" /><label for="mc">Must change password at next logon</label></div>
+        }
+        else if (key == "__pwdNeverExpires")
+        {
+            <div class="checkbox"><input type="checkbox" id="pne" @bind="pwdNeverExpires" /><label for="pne">Password never expires</label></div>
+        }
+        else
+        {
+            <label>@FieldCatalog.Label(key)</label>
+            <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()"
+                   placeholder="@(key == "userPrincipalName" ? Upn : null)" />
+            @if (key == "displayName")
+            {
+                <div class="hint">CN of the object. Empty → SAM account name.</div>
+            }
+        }
     }
 
     <div class="btnrow" style="margin-top:16px">
@@ -100,52 +93,50 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private static readonly string[] Tabs = { "General", "Account", "Address", "Telephones", "Organization", "Profile" };
-    private static readonly string[] AttrKeys =
-    {
-        "givenName","sn","initials","displayName","description","physicalDeliveryOfficeName","telephoneNumber","mail","wWWHomePage",
-        "userPrincipalName","streetAddress","postOfficeBox","l","st","postalCode","co","c",
-        "homePhone","pager","mobile","facsimileTelephoneNumber","ipPhone","info",
-        "title","department","company","manager","profilePath","scriptPath","homeDirectory","homeDrive",
-    };
+    private static readonly HashSet<string> Special = new(StringComparer.OrdinalIgnoreCase)
+        { "sAMAccountName", "__password", "__enabled", "__mustChange", "__pwdNeverExpires" };
 
     private List<AdOuNode>? ous;
+    private List<UserTemplate> templates = new();
+    private UserTemplate? selectedTemplate;
+    private string templateSel = "";
+    private List<TemplateTab> defaultLayout = TemplateDefaults.Create();
+
     private readonly Dictionary<string, string?> model = new(StringComparer.OrdinalIgnoreCase);
-    private string tab = "General";
-    private string ouDn = "", sam = "", password = "", upnField = "";
-    private bool enabled = true, mustChange;
+    private int sel;
+    private string ouDn = "", sam = "", password = "";
+    private bool enabled = true, mustChange, pwdNeverExpires;
     private string? banner; private bool ok;
 
+    private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
+    private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
     private string Upn => (string.IsNullOrWhiteSpace(sam) ? "user" : sam) + "@" + Ui.Domain;
 
     protected override async Task OnInitializedAsync()
     {
         ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
         ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
+        templates = (await Templates.ListAsync()).Where(t => t.Kind == "Create").ToList();
     }
 
-    private RenderFragment Field(string label, string key) => builder =>
+    private void OnTemplateChange()
     {
-        builder.OpenElement(0, "label"); builder.AddContent(1, label); builder.CloseElement();
-        builder.OpenElement(2, "input");
-        builder.AddAttribute(3, "type", "text");
-        builder.AddAttribute(4, "value", model.GetValueOrDefault(key));
-        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => model[key] = e.Value?.ToString()));
-        builder.CloseElement();
-    };
+        selectedTemplate = Guid.TryParse(templateSel, out var id) ? templates.FirstOrDefault(t => t.Id == id) : null;
+        sel = 0;
+    }
 
     private async Task Create()
     {
         var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
         var display = model.GetValueOrDefault("displayName");
         if (string.IsNullOrWhiteSpace(display)) display = sam;
-        var upn = string.IsNullOrWhiteSpace(upnField) ? Upn : upnField.Trim();
+        var upn = model.GetValueOrDefault("userPrincipalName");
+        if (string.IsNullOrWhiteSpace(upn)) upn = Upn;
 
         var attrs = new Dictionary<string, string?>();
-        foreach (var k in AttrKeys)
+        foreach (var (k, v) in model)
         {
-            if (k is "displayName" or "userPrincipalName") continue; // идут явными параметрами
-            var v = model.GetValueOrDefault(k);
+            if (Special.Contains(k) || k is "displayName" or "userPrincipalName") continue;
             if (!string.IsNullOrEmpty(v)) attrs[k] = v;
         }
 
@@ -156,10 +147,12 @@
         ok = r.Success;
         banner = r.Success ? $"User '{sam}' created." : ("Error: " + r.Message);
 
-        if (r.Success && mustChange)
+        if (r.Success && (mustChange || pwdNeverExpires))
         {
             var dn = $"CN={display.Trim()},{ouDn}";
-            await Mgmt.SetAccountOptionsAsync(actor, dn, new AccountOptions(MustChangePasswordAtNextLogon: true));
+            await Mgmt.SetAccountOptionsAsync(actor, dn, new AccountOptions(
+                MustChangePasswordAtNextLogon: mustChange ? true : null,
+                PasswordNeverExpires: pwdNeverExpires ? true : null));
         }
         if (r.Success) { sam = password = ""; model.Clear(); }
     }

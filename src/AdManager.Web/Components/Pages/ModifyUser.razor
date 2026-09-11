@@ -1,6 +1,7 @@
 @page "/users/modify"
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
+@inject IUserTemplateStore Templates
 @inject NavigationManager Nav
 
 <PageTitle>Modify user — admanager</PageTitle>
@@ -18,75 +19,75 @@
 }
 else
 {
+    <div class="panel" style="max-width:420px">
+        <label>Layout template</label>
+        <select @bind="templateSel" @bind:after="OnTemplateChange">
+            <option value="">(default)</option>
+            @foreach (var t in templates)
+            {
+                <option value="@t.Id">@t.Name</option>
+            }
+        </select>
+    </div>
+
     <div class="tabbar">
-        @foreach (var t in Tabs)
+        @for (int i = 0; i < Layout.Count; i++)
         {
-            <button class="tabbtn @(tab == t ? "on" : null)" @onclick="() => tab = t">@t</button>
+            var idx = i;
+            <button class="tabbtn @(sel == idx ? "on" : null)" @onclick="() => sel = idx">@Layout[idx].Title</button>
         }
     </div>
 
     <div class="panel" style="max-width:640px">
-        @if (tab == "General")
+        @foreach (var key in CurrentTab.Fields)
         {
-            @Field("First name", "givenName")
-            @Field("Initials", "initials")
-            @Field("Last name", "sn")
-            @Field("Display name", "displayName")
-            @Field("Description", "description")
-            @Field("Office", "physicalDeliveryOfficeName")
-            @Field("Telephone", "telephoneNumber")
-            @Field("Email", "mail")
-            @Field("Web page", "wWWHomePage")
+            @if (key == "sAMAccountName")
+            {
+                <label>SAM account name</label>
+                <input type="text" value="@sam" disabled />
+            }
+            else if (key == "__enabled")
+            {
+                <div class="checkbox"><input type="checkbox" id="en" checked="@enabled" @onchange="ToggleEnabled" /><label for="en">Account enabled</label></div>
+            }
+            else if (key == "__pwdNeverExpires")
+            {
+                <div class="checkbox"><input type="checkbox" id="pne" checked="@pne" @onchange="TogglePne" /><label for="pne">Password never expires</label></div>
+            }
+            else if (key == "__mustChange")
+            {
+                <div class="btnrow"><button @onclick="ForceChange">Force change at next logon</button></div>
+            }
+            else if (key == "__password")
+            {
+                <label>Reset password</label>
+                <div class="toolbar" style="margin:4px 0">
+                    <input type="password" class="grow" @bind="resetPwd" placeholder="new password" />
+                    <button @onclick="ResetPassword" disabled="@string.IsNullOrEmpty(resetPwd)">Reset</button>
+                </div>
+            }
+            else
+            {
+                <label>@FieldCatalog.Label(key)</label>
+                <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()" />
+                @if (key == "userPrincipalName")
+                {
+                    <div class="hint">Empty UPN is not cleared.</div>
+                }
+                else if (key == "manager")
+                {
+                    <div class="hint">Full DN, e.g. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div>
+                }
+            }
         }
-        else if (tab == "Account")
-        {
-            @Field("User principal name", "userPrincipalName")
-            <div class="hint">Пустой UPN не очищается.</div>
-            <hr />
-            <h3>Account options</h3>
-            <div class="checkbox"><input type="checkbox" id="pne" checked="@pne" @onchange="TogglePne" /><label for="pne">Password never expires</label></div>
-            <div class="btnrow"><button @onclick="ForceChange">Force change at next logon</button></div>
-            <label>Account expires</label>
-            <input type="date" @bind="expiry" />
-            <div class="btnrow">
-                <button @onclick="SetExpiry" disabled="@(expiry is null)">Set expiry</button>
-                <button @onclick="ClearExpiry">Clear (never)</button>
-            </div>
-        }
-        else if (tab == "Address")
-        {
-            @Field("Street", "streetAddress")
-            @Field("P.O. Box", "postOfficeBox")
-            @Field("City", "l")
-            @Field("State/Province", "st")
-            @Field("Zip/Postal code", "postalCode")
-            @Field("Country/Region", "co")
-            @Field("Country code (ISO2)", "c")
-        }
-        else if (tab == "Telephones")
-        {
-            @Field("Home", "homePhone")
-            @Field("Pager", "pager")
-            @Field("Mobile", "mobile")
-            @Field("Fax", "facsimileTelephoneNumber")
-            @Field("IP phone", "ipPhone")
-            @Field("Notes", "info")
-        }
-        else if (tab == "Organization")
-        {
-            @Field("Title", "title")
-            @Field("Department", "department")
-            @Field("Company", "company")
-            @Field("Manager (DN)", "manager")
-            <div class="hint">Полный DN руководителя, напр. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div>
-        }
-        else if (tab == "Profile")
-        {
-            @Field("Profile path", "profilePath")
-            @Field("Logon script", "scriptPath")
-            @Field("Home folder (path)", "homeDirectory")
-            @Field("Home drive", "homeDrive")
-        }
+
+        <hr />
+        <label>Account expires</label>
+        <input type="date" @bind="expiry" />
+        <div class="btnrow">
+            <button @onclick="SetExpiry" disabled="@(expiry is null)">Set expiry</button>
+            <button @onclick="ClearExpiry">Clear (never)</button>
+        </div>
 
         <div class="btnrow" style="margin-top:16px">
             <button class="primary" @onclick="SaveAll">Save attributes</button>
@@ -99,8 +100,9 @@ else
     [SupplyParameterFromQuery] private string? Dn { get; set; }
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private static readonly string[] Tabs = { "General", "Account", "Address", "Telephones", "Organization", "Profile" };
-    private static readonly string[] EditableKeys =
+    private static readonly HashSet<string> Special = new(StringComparer.OrdinalIgnoreCase)
+        { "sAMAccountName", "__password", "__enabled", "__mustChange", "__pwdNeverExpires" };
+    private static readonly string[] TextKeys =
     {
         "givenName","sn","initials","displayName","description","physicalDeliveryOfficeName","telephoneNumber","mail","wWWHomePage",
         "userPrincipalName","streetAddress","postOfficeBox","l","st","postalCode","co","c",
@@ -108,20 +110,39 @@ else
         "title","department","company","manager","profilePath","scriptPath","homeDirectory","homeDrive",
     };
 
+    private List<UserTemplate> templates = new();
+    private UserTemplate? selectedTemplate;
+    private string templateSel = "";
+    private readonly List<TemplateTab> defaultLayout = TemplateDefaults.Modify();
+
     private Dictionary<string, string?>? model;
-    private string tab = "General";
-    private bool pne; private DateTime? expiry;
+    private int sel;
+    private string sam = "", resetPwd = "";
+    private bool pne, enabled;
+    private DateTime? expiry;
     private string? banner; private bool ok;
+
+    private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
+    private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
 
     protected override async Task OnInitializedAsync()
     {
         if (string.IsNullOrEmpty(Dn)) { banner = "No user specified."; ok = false; return; }
-        var wanted = EditableKeys.Append("userAccountControl").ToArray();
+        var wanted = TextKeys.Concat(new[] { "sAMAccountName", "userAccountControl" }).ToArray();
         var det = await Dir.GetObjectAsync(Dn, wanted);
         model = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var k in EditableKeys) model[k] = det?.Attributes.GetValueOrDefault(k);
+        foreach (var k in TextKeys) model[k] = det?.Attributes.GetValueOrDefault(k);
+        sam = det?.Attributes.GetValueOrDefault("sAMAccountName") ?? "";
         var uac = int.TryParse(det?.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
         pne = (uac & 0x10000) != 0;
+        enabled = (uac & 0x2) == 0;
+        templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
+    }
+
+    private void OnTemplateChange()
+    {
+        selectedTemplate = Guid.TryParse(templateSel, out var id) ? templates.FirstOrDefault(t => t.Id == id) : null;
+        sel = 0;
     }
 
     private async Task<TechnicianContext> Actor()
@@ -130,34 +151,38 @@ else
         return CurrentUser.From(p);
     }
 
-    private RenderFragment Field(string label, string key) => builder =>
-    {
-        builder.OpenElement(0, "label"); builder.AddContent(1, label); builder.CloseElement();
-        builder.OpenElement(2, "input");
-        builder.AddAttribute(3, "type", "text");
-        builder.AddAttribute(4, "value", model!.GetValueOrDefault(key));
-        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => model![key] = e.Value?.ToString()));
-        builder.CloseElement();
-    };
-
     private async Task SaveAll()
     {
+        // Пишем только текстовые поля, присутствующие в текущей раскладке (шаблон ограничивает объём).
+        var layoutKeys = Layout.SelectMany(t => t.Fields)
+            .Where(k => !Special.Contains(k)).Distinct().ToList();
         var attrs = new Dictionary<string, string?>();
-        foreach (var k in EditableKeys)
+        foreach (var k in layoutKeys)
         {
             var val = model!.GetValueOrDefault(k);
             if (k == "userPrincipalName" && string.IsNullOrEmpty(val)) continue; // не очищать UPN
             attrs[k] = val;
         }
+        if (attrs.Count == 0) { ok = true; banner = "No editable attributes in this layout."; return; }
         Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs));
     }
 
+    private async Task ToggleEnabled(ChangeEventArgs e)
+    {
+        enabled = (bool)(e.Value ?? false);
+        Show(await Mgmt.SetEnabledAsync(await Actor(), Dn!, enabled));
+    }
     private async Task TogglePne(ChangeEventArgs e)
     {
         pne = (bool)(e.Value ?? false);
         Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(PasswordNeverExpires: pne)));
     }
     private async Task ForceChange() => Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(MustChangePasswordAtNextLogon: true)));
+    private async Task ResetPassword()
+    {
+        Show(await Mgmt.ResetPasswordAsync(await Actor(), Dn!, resetPwd, false));
+        resetPwd = "";
+    }
     private async Task SetExpiry() => Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(AccountExpiresUtc: expiry)));
     private async Task ClearExpiry() { expiry = null; Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(ClearAccountExpiry: true))); }
 

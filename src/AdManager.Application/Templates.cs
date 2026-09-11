@@ -77,6 +77,30 @@ public sealed class UserTemplate
     public DateTime ModifiedUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>Дефолтные раскладки формы, когда шаблон не выбран (совпадают со статическими вкладками).</summary>
+public static class TemplateDefaults
+{
+    public static List<TemplateTab> Create() => new()
+    {
+        new() { Title = "General", Fields = { "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage" } },
+        new() { Title = "Account", Fields = { "sAMAccountName", "userPrincipalName", "__password", "__enabled", "__mustChange" } },
+        new() { Title = "Address", Fields = { "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c" } },
+        new() { Title = "Telephones", Fields = { "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info" } },
+        new() { Title = "Organization", Fields = { "title", "department", "company", "manager" } },
+        new() { Title = "Profile", Fields = { "profilePath", "scriptPath", "homeDirectory", "homeDrive" } },
+    };
+
+    public static List<TemplateTab> Modify() => new()
+    {
+        new() { Title = "General", Fields = { "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage" } },
+        new() { Title = "Account", Fields = { "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange", "__password" } },
+        new() { Title = "Address", Fields = { "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c" } },
+        new() { Title = "Telephones", Fields = { "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info" } },
+        new() { Title = "Organization", Fields = { "title", "department", "company", "manager" } },
+        new() { Title = "Profile", Fields = { "profilePath", "scriptPath", "homeDirectory", "homeDrive" } },
+    };
+}
+
 public interface IUserTemplateStore
 {
     Task<List<UserTemplate>> ListAsync(CancellationToken ct = default);
