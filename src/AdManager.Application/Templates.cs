@@ -46,23 +46,82 @@ public static class FieldCatalog
         new("department", "Department", "Organization"),
         new("company", "Company", "Organization"),
         new("manager", "Manager", "Organization"),
+        new("employeeNumber", "Employee number", "Organization"),
+        new("employeeType", "Employee type", "Organization"),
+        new("division", "Division", "Organization"),
+        // Exchange
+        new("proxyAddresses", "Email addresses (proxy)", "Exchange"),
+        new("mailNickname", "Exchange alias", "Exchange"),
+        new("targetAddress", "External email (targetAddress)", "Exchange"),
         // Profile
         new("profilePath", "Profile path", "Profile"),
         new("scriptPath", "Logon script", "Profile"),
         new("homeDirectory", "Home folder", "Profile"),
         new("homeDrive", "Home drive", "Profile"),
+        new("userWorkstations", "Log on to (workstations)", "Profile"),
     };
 
     public static readonly IReadOnlyList<string> Categories =
         All.Select(f => f.Category).Distinct().ToList();
 
     public static string Label(string key) => All.FirstOrDefault(f => f.Key == key)?.Label ?? key;
+
+    /// <summary>Спец-контролы (не текстовые ldap-атрибуты).</summary>
+    public static bool IsSpecial(string key) => key.StartsWith("__", StringComparison.Ordinal) || key == "sAMAccountName";
+
+    /// <summary>Булевы спец-контролы (чекбоксы).</summary>
+    public static bool IsBool(string key) => key is "__enabled" or "__mustChange" or "__pwdNeverExpires";
+
+    /// <summary>Поля, к которым применимо авто-именование (из имени/фамилии).</summary>
+    public static bool SupportsNaming(string key) => key is "sAMAccountName" or "userPrincipalName" or "displayName";
+}
+
+/// <summary>Правила авто-именования (logon/UPN/display из givenName+sn), как в ADManager.</summary>
+public static class NamingRules
+{
+    public static readonly (string Value, string Label)[] Options =
+    {
+        ("", "(manual)"),
+        ("firstlast", "First+Last — JohnSmith"),
+        ("firstlast_lower", "firstlast — johnsmith"),
+        ("first.last", "first.last — john.smith"),
+        ("flast", "f+Last — jsmith"),
+        ("first_last_space", "First Last — John Smith"),
+        ("first", "First — John"),
+    };
+
+    public static string? Apply(string? rule, string? first, string? last)
+    {
+        if (string.IsNullOrEmpty(rule)) return null;
+        first = (first ?? "").Trim();
+        last = (last ?? "").Trim();
+        var s = rule switch
+        {
+            "firstlast" => first + last,
+            "firstlast_lower" => (first + last).ToLowerInvariant(),
+            "first.last" => string.Join(".", new[] { first, last }.Where(x => x.Length > 0)),
+            "flast" => (first.Length > 0 ? first[..1] : "") + last,
+            "first_last_space" => string.Join(" ", new[] { first, last }.Where(x => x.Length > 0)),
+            "first" => first,
+            _ => "",
+        };
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+}
+
+/// <summary>Поле в шаблоне: ключ + предзаполнение/обязательность/правило именования.</summary>
+public sealed class TemplateField
+{
+    public string Key { get; set; } = "";
+    public string? Default { get; set; }   // предзаполнение (для булевых: "true"/"false")
+    public bool Required { get; set; }
+    public string? Naming { get; set; }     // правило NamingRules для sAMAccountName/userPrincipalName/displayName
 }
 
 public sealed class TemplateTab
 {
     public string Title { get; set; } = "";
-    public List<string> Fields { get; set; } = new();
+    public List<TemplateField> Fields { get; set; } = new();
 }
 
 /// <summary>Шаблон формы пользователя: набор вкладок и полей в них (для create/modify).</summary>
@@ -80,24 +139,27 @@ public sealed class UserTemplate
 /// <summary>Дефолтные раскладки формы, когда шаблон не выбран (совпадают со статическими вкладками).</summary>
 public static class TemplateDefaults
 {
+    private static TemplateTab Tab(string title, params string[] keys) =>
+        new() { Title = title, Fields = keys.Select(k => new TemplateField { Key = k }).ToList() };
+
     public static List<TemplateTab> Create() => new()
     {
-        new() { Title = "General", Fields = { "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage" } },
-        new() { Title = "Account", Fields = { "sAMAccountName", "userPrincipalName", "__password", "__enabled", "__mustChange" } },
-        new() { Title = "Address", Fields = { "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c" } },
-        new() { Title = "Telephones", Fields = { "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info" } },
-        new() { Title = "Organization", Fields = { "title", "department", "company", "manager" } },
-        new() { Title = "Profile", Fields = { "profilePath", "scriptPath", "homeDirectory", "homeDrive" } },
+        Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
+        Tab("Account", "sAMAccountName", "userPrincipalName", "__password", "__enabled", "__mustChange"),
+        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
+        Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
+        Tab("Organization", "title", "department", "company", "manager"),
+        Tab("Profile", "profilePath", "scriptPath", "homeDirectory", "homeDrive"),
     };
 
     public static List<TemplateTab> Modify() => new()
     {
-        new() { Title = "General", Fields = { "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage" } },
-        new() { Title = "Account", Fields = { "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange", "__password" } },
-        new() { Title = "Address", Fields = { "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c" } },
-        new() { Title = "Telephones", Fields = { "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info" } },
-        new() { Title = "Organization", Fields = { "title", "department", "company", "manager" } },
-        new() { Title = "Profile", Fields = { "profilePath", "scriptPath", "homeDirectory", "homeDrive" } },
+        Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
+        Tab("Account", "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange", "__password"),
+        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
+        Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
+        Tab("Organization", "title", "department", "company", "manager"),
+        Tab("Profile", "profilePath", "scriptPath", "homeDirectory", "homeDrive"),
     };
 }
 

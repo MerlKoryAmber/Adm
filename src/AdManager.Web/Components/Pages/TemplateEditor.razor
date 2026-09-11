@@ -80,17 +80,39 @@
                 }
                 else
                 {
+                    <div class="hint" style="margin-bottom:6px">Per field: default value / auto-naming, and whether it is required.</div>
                     <div class="fieldlist">
                         @for (int j = 0; j < tab.Fields.Count; j++)
                         {
-                            var fi = j; var key = tab.Fields[fi];
+                            var fi = j; var f = tab.Fields[fi];
                             <div class="fieldrow">
-                                <span class="fname">@FieldCatalog.Label(key)</span>
-                                <span class="fkey">@key</span>
+                                <span class="fname" style="min-width:130px">@FieldCatalog.Label(f.Key)</span>
+                                <span class="fkey">@f.Key</span>
                                 <span class="grow"></span>
+                                @if (FieldCatalog.SupportsNaming(f.Key))
+                                {
+                                    <select @bind="f.Naming" style="max-width:190px" title="Auto-naming from first/last name">
+                                        @foreach (var (v, l) in NamingRules.Options)
+                                        {
+                                            <option value="@v">@l</option>
+                                        }
+                                    </select>
+                                }
+                                else if (FieldCatalog.IsBool(f.Key))
+                                {
+                                    <label class="chkinline"><input type="checkbox" checked="@(f.Default == "true")" @onchange="e => SetBoolDefault(f, e)" /> default on</label>
+                                }
+                                else if (f.Key != "__password")
+                                {
+                                    <input type="text" style="max-width:190px" placeholder="default value" @bind="f.Default" />
+                                }
+                                @if (!FieldCatalog.IsBool(f.Key))
+                                {
+                                    <label class="chkinline"><input type="checkbox" @bind="f.Required" /> required</label>
+                                }
                                 <button class="linkbtn" @onclick="() => MoveField(fi, -1)" disabled="@(fi == 0)">↑</button>
                                 <button class="linkbtn" @onclick="() => MoveField(fi, 1)" disabled="@(fi == tab.Fields.Count - 1)">↓</button>
-                                <button class="linkbtn danger" @onclick="() => RemoveField(key)">×</button>
+                                <button class="linkbtn danger" @onclick="() => RemoveField(f.Key)">×</button>
                             </div>
                         }
                     </div>
@@ -114,7 +136,7 @@
     private bool confirmTabDel;
     private string? banner; private bool ok;
 
-    private HashSet<string> Placed => tpl.Tabs.SelectMany(t => t.Fields).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> Placed => tpl.Tabs.SelectMany(t => t.Fields).Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -124,16 +146,7 @@
         }
         else
         {
-            tpl = new UserTemplate
-            {
-                Kind = "Create",
-                Tabs = new()
-                {
-                    new TemplateTab { Title = "General", Fields = { "givenName", "sn", "displayName", "description", "mail" } },
-                    new TemplateTab { Title = "Account", Fields = { "sAMAccountName", "userPrincipalName", "__password", "__enabled" } },
-                    new TemplateTab { Title = "Contact", Fields = { "telephoneNumber", "mobile", "physicalDeliveryOfficeName" } },
-                },
-            };
+            tpl = new UserTemplate { Kind = "Create", Tabs = TemplateDefaults.Create().Take(3).ToList() };
         }
         if (tpl.Tabs.Count == 0) tpl.Tabs.Add(new TemplateTab { Title = "General" });
         sel = 0;
@@ -142,10 +155,10 @@
     private void AddField(string key)
     {
         if (Placed.Contains(key)) return;
-        tpl.Tabs[sel].Fields.Add(key);
+        tpl.Tabs[sel].Fields.Add(new TemplateField { Key = key });
     }
 
-    private void RemoveField(string key) => tpl.Tabs[sel].Fields.Remove(key);
+    private void RemoveField(string key) => tpl.Tabs[sel].Fields.RemoveAll(f => f.Key == key);
 
     private void MoveField(int index, int delta)
     {
@@ -154,6 +167,8 @@
         if (to < 0 || to >= list.Count) return;
         (list[index], list[to]) = (list[to], list[index]);
     }
+
+    private static void SetBoolDefault(TemplateField f, ChangeEventArgs e) => f.Default = ((bool)(e.Value ?? false)) ? "true" : "false";
 
     private void AddTab()
     {

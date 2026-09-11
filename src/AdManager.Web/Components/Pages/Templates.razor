@@ -81,7 +81,11 @@ else
             Name = src.Name + " (copy)",
             Description = src.Description,
             Kind = src.Kind,
-            Tabs = src.Tabs.Select(t => new TemplateTab { Title = t.Title, Fields = new(t.Fields) }).ToList(),
+            Tabs = src.Tabs.Select(t => new TemplateTab
+            {
+                Title = t.Title,
+                Fields = t.Fields.Select(f => new TemplateField { Key = f.Key, Default = f.Default, Required = f.Required, Naming = f.Naming }).ToList(),
+            }).ToList(),
         };
         await Store.SaveAsync(clone);
         ok = true; banner = $"Copied '{src.Name}'.";

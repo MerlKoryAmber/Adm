@@ -39,8 +39,10 @@ else
     </div>
 
     <div class="panel" style="max-width:640px">
-        @foreach (var key in CurrentTab.Fields)
+        @foreach (var f in CurrentTab.Fields)
         {
+            var key = f.Key;
+            var req = f.Required ? " *" : "";
             @if (key == "sAMAccountName")
             {
                 <label>SAM account name</label>
@@ -68,16 +70,10 @@ else
             }
             else
             {
-                <label>@FieldCatalog.Label(key)</label>
+                <label>@FieldCatalog.Label(key)@(req)</label>
                 <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()" />
-                @if (key == "userPrincipalName")
-                {
-                    <div class="hint">Empty UPN is not cleared.</div>
-                }
-                else if (key == "manager")
-                {
-                    <div class="hint">Full DN, e.g. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div>
-                }
+                @if (key == "userPrincipalName") { <div class="hint">Empty UPN is not cleared.</div> }
+                else if (key == "manager") { <div class="hint">Full DN, e.g. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div> }
             }
         }
 
@@ -100,15 +96,8 @@ else
     [SupplyParameterFromQuery] private string? Dn { get; set; }
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private static readonly HashSet<string> Special = new(StringComparer.OrdinalIgnoreCase)
-        { "sAMAccountName", "__password", "__enabled", "__mustChange", "__pwdNeverExpires" };
-    private static readonly string[] TextKeys =
-    {
-        "givenName","sn","initials","displayName","description","physicalDeliveryOfficeName","telephoneNumber","mail","wWWHomePage",
-        "userPrincipalName","streetAddress","postOfficeBox","l","st","postalCode","co","c",
-        "homePhone","pager","mobile","facsimileTelephoneNumber","ipPhone","info",
-        "title","department","company","manager","profilePath","scriptPath","homeDirectory","homeDrive",
-    };
+    private static readonly string[] TextKeys = FieldCatalog.All
+        .Where(f => !FieldCatalog.IsSpecial(f.Key)).Select(f => f.Key).Distinct().ToArray();
 
     private List<UserTemplate> templates = new();
     private UserTemplate? selectedTemplate;
@@ -153,9 +142,15 @@ else
 
     private async Task SaveAll()
     {
+        // Обязательные текстовые поля раскладки
+        var miss = Layout.SelectMany(t => t.Fields)
+            .Where(f => f.Required && !FieldCatalog.IsSpecial(f.Key) && string.IsNullOrWhiteSpace(model!.GetValueOrDefault(f.Key)))
+            .Select(f => FieldCatalog.Label(f.Key)).Distinct().ToList();
+        if (miss.Count > 0) { ok = false; banner = "Required: " + string.Join(", ", miss); return; }
+
         // Пишем только текстовые поля, присутствующие в текущей раскладке (шаблон ограничивает объём).
-        var layoutKeys = Layout.SelectMany(t => t.Fields)
-            .Where(k => !Special.Contains(k)).Distinct().ToList();
+        var layoutKeys = Layout.SelectMany(t => t.Fields).Select(f => f.Key)
+            .Where(k => !FieldCatalog.IsSpecial(k)).Distinct().ToList();
         var attrs = new Dictionary<string, string?>();
         foreach (var k in layoutKeys)
         {

@@ -47,16 +47,19 @@
 </div>
 
 <div class="panel" style="max-width:660px">
-    @foreach (var key in CurrentTab.Fields)
+    @foreach (var f in CurrentTab.Fields)
     {
+        var key = f.Key;
+        var req = f.Required ? " *" : "";
         @if (key == "sAMAccountName")
         {
-            <label>SAM account name *</label>
-            <input type="text" @bind="sam" placeholder="j.doe" />
+            <label>SAM account name@(req)</label>
+            <input type="text" @bind="sam" placeholder="j.doe" disabled="@(f.Naming is { Length: > 0 })" />
+            @if (f.Naming is { Length: > 0 }) { <div class="hint">Auto from first/last name.</div> }
         }
         else if (key == "__password")
         {
-            <label>Password</label>
+            <label>Password@(req)</label>
             <input type="password" @bind="password" />
             <div class="hint">Needed for an enabled account; per domain policy.</div>
         }
@@ -74,13 +77,11 @@
         }
         else
         {
-            <label>@FieldCatalog.Label(key)</label>
-            <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()"
-                   placeholder="@(key == "userPrincipalName" ? Upn : null)" />
-            @if (key == "displayName")
-            {
-                <div class="hint">CN of the object. Empty → SAM account name.</div>
-            }
+            <label>@FieldCatalog.Label(key)@(req)</label>
+            <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => OnText(key, e)"
+                   placeholder="@(key == "userPrincipalName" ? Upn : null)" disabled="@(f.Naming is { Length: > 0 })" />
+            @if (f.Naming is { Length: > 0 }) { <div class="hint">Auto from first/last name.</div> }
+            else if (key == "displayName") { <div class="hint">CN of the object. Empty → SAM account name.</div> }
         }
     }
 
@@ -93,14 +94,11 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private static readonly HashSet<string> Special = new(StringComparer.OrdinalIgnoreCase)
-        { "sAMAccountName", "__password", "__enabled", "__mustChange", "__pwdNeverExpires" };
-
     private List<AdOuNode>? ous;
     private List<UserTemplate> templates = new();
     private UserTemplate? selectedTemplate;
     private string templateSel = "";
-    private List<TemplateTab> defaultLayout = TemplateDefaults.Create();
+    private readonly List<TemplateTab> defaultLayout = TemplateDefaults.Create();
 
     private readonly Dictionary<string, string?> model = new(StringComparer.OrdinalIgnoreCase);
     private int sel;
@@ -117,16 +115,74 @@
         ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
         ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
         templates = (await Templates.ListAsync()).Where(t => t.Kind == "Create").ToList();
+        ApplyTemplateDefaults();
     }
 
     private void OnTemplateChange()
     {
         selectedTemplate = Guid.TryParse(templateSel, out var id) ? templates.FirstOrDefault(t => t.Id == id) : null;
         sel = 0;
+        // сброс + предзаполнение под новый шаблон
+        model.Clear(); sam = ""; password = ""; enabled = true; mustChange = false; pwdNeverExpires = false;
+        ApplyTemplateDefaults();
+    }
+
+    private IEnumerable<TemplateField> AllFields => Layout.SelectMany(t => t.Fields);
+
+    private void ApplyTemplateDefaults()
+    {
+        foreach (var f in AllFields)
+        {
+            if (f.Key == "__enabled") enabled = f.Default is null ? true : f.Default == "true";
+            else if (f.Key == "__mustChange") mustChange = f.Default == "true";
+            else if (f.Key == "__pwdNeverExpires") pwdNeverExpires = f.Default == "true";
+            else if (f.Key == "sAMAccountName") { if (!string.IsNullOrEmpty(f.Default)) sam = f.Default!; }
+            else if (f.Key != "__password" && !string.IsNullOrEmpty(f.Default)) model[f.Key] = f.Default;
+        }
+        ApplyNaming();
+    }
+
+    private void OnText(string key, ChangeEventArgs e)
+    {
+        model[key] = e.Value?.ToString();
+        ApplyNaming();
+    }
+
+    private void ApplyNaming()
+    {
+        var first = model.GetValueOrDefault("givenName");
+        var last = model.GetValueOrDefault("sn");
+        foreach (var f in AllFields.Where(x => x.Naming is { Length: > 0 }))
+        {
+            var v = NamingRules.Apply(f.Naming, first, last);
+            if (v is null) continue;
+            if (f.Key == "sAMAccountName") sam = v;
+            else if (f.Key == "userPrincipalName") model["userPrincipalName"] = v + "@" + Ui.Domain;
+            else model[f.Key] = v; // displayName и т.п.
+        }
+    }
+
+    private List<string> MissingRequired()
+    {
+        var miss = new List<string>();
+        foreach (var f in AllFields.Where(x => x.Required))
+        {
+            var ok = f.Key switch
+            {
+                "sAMAccountName" => !string.IsNullOrWhiteSpace(sam),
+                "__password" => !string.IsNullOrWhiteSpace(password),
+                _ => !string.IsNullOrWhiteSpace(model.GetValueOrDefault(f.Key)),
+            };
+            if (!ok) miss.Add(FieldCatalog.Label(f.Key));
+        }
+        return miss;
     }
 
     private async Task Create()
     {
+        var miss = MissingRequired();
+        if (miss.Count > 0) { ok = false; banner = "Required: " + string.Join(", ", miss); return; }
+
         var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
         var display = model.GetValueOrDefault("displayName");
         if (string.IsNullOrWhiteSpace(display)) display = sam;
@@ -136,7 +192,7 @@
         var attrs = new Dictionary<string, string?>();
         foreach (var (k, v) in model)
         {
-            if (Special.Contains(k) || k is "displayName" or "userPrincipalName") continue;
+            if (FieldCatalog.IsSpecial(k) || k is "displayName" or "userPrincipalName") continue;
             if (!string.IsNullOrEmpty(v)) attrs[k] = v;
         }
 
@@ -154,7 +210,7 @@
                 MustChangePasswordAtNextLogon: mustChange ? true : null,
                 PasswordNeverExpires: pwdNeverExpires ? true : null));
         }
-        if (r.Success) { sam = password = ""; model.Clear(); }
+        if (r.Success) { sam = password = ""; model.Clear(); ApplyTemplateDefaults(); }
     }
 
     private static string Indent(int d) => new string(' ', d * 3);
