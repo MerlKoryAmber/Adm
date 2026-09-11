@@ -1,0 +1,126 @@
+@page "/automation"
+@inject IAutomationScheduler Scheduler
+@inject IAutomationStore Store
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+
+<PageTitle>Automation — admanager</PageTitle>
+<h1>Automation</h1>
+<p class="subtitle">Scheduled & rule-based tasks (cron in MSK). No approval workflow — each run goes through RBAC + audit.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel">
+    <div class="panelhead"><h3>Automations</h3><button @onclick="Reload">Refresh</button></div>
+    @if (data is null) { <p>Loading…</p> }
+    else if (data.Definitions.Count == 0) { <p class="muted">No automations.</p> }
+    else
+    {
+        <table>
+            <thead><tr><th>Name</th><th>Task</th><th>Cron (MSK)</th><th>Enabled</th><th>Last run (MSK)</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var a in data.Definitions)
+                {
+                    <tr>
+                        <td>@a.Name</td>
+                        <td>@a.TaskType</td>
+                        <td><code>@a.CronMsk</code></td>
+                        <td><span class="badge @(a.Enabled ? "ok" : "off")">@(a.Enabled ? "On" : "Off")</span></td>
+                        <td>@LastRun(a.Id)</td>
+                        <td>
+                            <button @onclick="() => Toggle(a)">@(a.Enabled ? "Disable" : "Enable")</button>
+                            <button @onclick="() => Trigger(a.Id)">Run now</button>
+                            <button class="danger" @onclick="() => Delete(a.Id)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<div class="panel" style="margin-top:18px;max-width:620px">
+    <h3>New automation</h3>
+    <label>Name</label><input type="text" @bind="name" placeholder="Disable stale accounts" />
+    <label>Task type</label>
+    <select @bind="taskType">
+        @foreach (var t in AutomationTaskTypes.All) { <option value="@t">@t</option> }
+    </select>
+    <label>Cron (MSK)</label>
+    <input type="text" @bind="cron" placeholder="0 2 * * *" />
+    <div class="hint">Standard 5-field cron. Example <code>0 2 * * *</code> = daily 02:00 MSK.</div>
+
+    @if (taskType == AutomationTaskTypes.DisableInactiveUsers)
+    {
+        <label>OU</label>
+        <select @bind="ou">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <label>Inactive days</label>
+        <input type="text" @bind="days" placeholder="90" />
+    }
+
+    <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
+    <div class="btnrow"><button class="primary" @onclick="Create" disabled="@(string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(cron))">Create automation</button></div>
+</div>
+
+@code {
+    private AutomationData? data;
+    private List<AdOuNode>? ous;
+    private string? banner; private bool ok;
+
+    private string name = "", taskType = AutomationTaskTypes.DisableInactiveUsers, cron = "0 2 * * *", ou = "", days = "90";
+    private bool enabled = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
+        ou = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : Ui.BaseDn;
+        await Reload();
+    }
+
+    private async Task Reload() => data = await Store.LoadAsync();
+
+    private string LastRun(Guid id) => data!.LastRunUtc.TryGetValue(id.ToString(), out var t) ? t.ToString("yyyy-MM-dd HH:mm") : "—";
+
+    private async Task Create()
+    {
+        var pars = new Dictionary<string, string>();
+        if (taskType == AutomationTaskTypes.DisableInactiveUsers) { pars["ou"] = ou; pars["days"] = days; }
+        var def = new AutomationDefinition(Guid.NewGuid(), name.Trim(), cron.Trim(), enabled, taskType, pars);
+        await Scheduler.RegisterAsync(def);
+        Show("Automation created."); name = ""; await Reload();
+    }
+
+    private async Task Toggle(AutomationDefinition a)
+    {
+        var upd = a with { Enabled = !a.Enabled };
+        await Scheduler.RegisterAsync(upd);
+        await Reload();
+    }
+
+    private async Task Trigger(Guid id)
+    {
+        await Scheduler.TriggerNowAsync(id);
+        Show("Triggered."); await Reload();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        var d = await Store.LoadAsync();
+        d.Definitions.RemoveAll(x => x.Id == id);
+        d.LastRunUtc.Remove(id.ToString());
+        await Store.SaveAsync(d);
+        Show("Deleted."); await Reload();
+    }
+
+    private void Show(string m) { ok = true; banner = m; }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

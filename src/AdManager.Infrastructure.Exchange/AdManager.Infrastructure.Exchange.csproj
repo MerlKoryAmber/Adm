@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>AdManager.Infrastructure.Exchange</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- PowerShell SDK для remote runspace к Exchange 2019. Версию проверить при restore. -->
+    <PackageReference Include="System.Management.Automation" Version="7.4.6" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AdManager.Application\AdManager.Application.csproj" />
+  </ItemGroup>
+</Project>

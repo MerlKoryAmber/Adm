@@ -1,0 +1,141 @@
+@page "/exchange"
+@inject ExchangeManagementService Ex
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+
+<PageTitle>Exchange — admanager</PageTitle>
+<h1>Exchange</h1>
+<p class="subtitle">On-prem Exchange 2019 via remote PowerShell. Requires a configured Exchange server (Exchange:ConnectionUri).</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="layout2">
+    <div class="panel">
+        <h3>Mailboxes</h3>
+        <label>Organizational Unit</label>
+        <select @bind="ouDn" @bind:after="LoadUsers">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+
+        @if (users is null) { <p>Loading…</p> }
+        else
+        {
+            <table style="margin-top:8px">
+                <thead><tr><th>Display name</th><th>Account</th></tr></thead>
+                <tbody>
+                    @foreach (var u in users)
+                    {
+                        <tr class="selectable @(sel?.Dn == u.Dn ? "selected" : null)" @onclick="() => sel = u">
+                            <td>@u.DisplayName</td><td>@u.SamAccountName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (sel is not null)
+        {
+            <hr />
+            <h3>@sel.DisplayName</h3>
+            <label>Alias (optional)</label>
+            <input type="text" @bind="alias" placeholder="j.doe" />
+            <div class="btnrow">
+                <button class="primary" @onclick="EnableMailbox">Enable mailbox</button>
+                <button class="danger" @onclick="DisableMailbox">Disable mailbox</button>
+            </div>
+
+            <label>Issue warning quota (MB)</label><input type="text" @bind="warnMb" />
+            <label>Prohibit send quota (MB)</label><input type="text" @bind="sendMb" />
+            <div class="checkbox"><input type="checkbox" id="hid" @bind="hidden" /><label for="hid">Hidden from address lists</label></div>
+            <div class="btnrow"><button class="primary" @onclick="SetProps">Set properties</button></div>
+        }
+    </div>
+
+    <div class="panel">
+        <h3>Distribution groups</h3>
+        <label>New group name</label><input type="text" @bind="dgName" placeholder="All-Sales" />
+        <label>Target OU</label>
+        <select @bind="dgOu">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <div class="btnrow"><button class="primary" @onclick="CreateDg" disabled="@string.IsNullOrWhiteSpace(dgName)">Create distribution group</button></div>
+
+        <hr />
+        <h3>Membership</h3>
+        <label>Group identity</label><input type="text" @bind="dgIdentity" placeholder="All-Sales" />
+        <label>Member</label>
+        <select @bind="dgMember">
+            <option value="">— select a user —</option>
+            @foreach (var u in users ?? Enumerable.Empty<AdUserSummary>())
+            {
+                <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
+            }
+        </select>
+        <div class="btnrow">
+            <button @onclick="AddMember" disabled="@(string.IsNullOrWhiteSpace(dgIdentity) || string.IsNullOrEmpty(dgMember))">Add member</button>
+            <button class="danger" @onclick="RemoveMember" disabled="@(string.IsNullOrWhiteSpace(dgIdentity) || string.IsNullOrEmpty(dgMember))">Remove member</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private List<AdUserSummary>? users;
+    private AdUserSummary? sel;
+    private string ouDn = "", alias = "", warnMb = "", sendMb = "";
+    private bool hidden;
+    private string dgName = "", dgOu = "", dgIdentity = "", dgMember = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
+        ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : Ui.BaseDn;
+        dgOu = ous.Any(o => o.Dn == Ui.GroupsOu) ? Ui.GroupsOu : Ui.BaseDn;
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        try { users = (await Dir.ListUsersAsync(ouDn, subtree: true)).ToList(); }
+        catch (Exception ex) { Fail(ex.Message); }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task EnableMailbox() => Show(await Ex.EnableMailboxAsync(await Actor(), sel!.Dn, string.IsNullOrWhiteSpace(alias) ? null : alias));
+    private async Task DisableMailbox() => Show(await Ex.DisableMailboxAsync(await Actor(), sel!.Dn));
+
+    private async Task SetProps()
+    {
+        long? warn = long.TryParse(warnMb, out var w) ? w : null;
+        long? send = long.TryParse(sendMb, out var s) ? s : null;
+        var props = new MailboxProperties(string.IsNullOrWhiteSpace(alias) ? null : alias, warn, send, hidden);
+        Show(await Ex.SetMailboxPropertiesAsync(await Actor(), sel!.Dn, props));
+    }
+
+    private async Task CreateDg() { Show(await Ex.CreateDistributionGroupAsync(await Actor(), dgName.Trim(), dgOu)); }
+    private async Task AddMember() { Show(await Ex.ManageDistributionMembersAsync(await Actor(), dgIdentity.Trim(), new[] { dgMember }, Array.Empty<string>())); }
+    private async Task RemoveMember() { Show(await Ex.ManageDistributionMembersAsync(await Actor(), dgIdentity.Trim(), Array.Empty<string>(), new[] { dgMember })); }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+    private void Fail(string m) { ok = false; banner = "Error: " + m; }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

@@ -1,0 +1,20 @@
+@page "/"
+
+<PageTitle>admanager</PageTitle>
+
+<h1>admanager</h1>
+
+<p class="lead">On-premises Active Directory management &amp; delegation. Lab domain: <b>@Ui.Domain</b>.</p>
+
+<div class="cards">
+    <a class="card" href="users"><h3>Users</h3><p>Reset password, unlock, enable/disable, edit attributes, move, delete.</p></a>
+    <a class="card" href="users/create"><h3>Create user</h3><p>Provision a new user account in the lab OU.</p></a>
+    <a class="card" href="groups"><h3>Groups</h3><p>Manage group membership.</p></a>
+    <a class="card" href="audit"><h3>Audit</h3><p>Every operation, who did what and when (MSK).</p></a>
+</div>
+
+<p class="muted">Browsing OU: <code>@Ui.UsersOu</code></p>
+
+@code {
+    [Inject] private UiOptions Ui { get; set; } = default!;
+}

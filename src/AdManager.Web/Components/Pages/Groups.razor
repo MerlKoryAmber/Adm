@@ -1,0 +1,180 @@
+@page "/groups"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+
+<PageTitle>Group Management — admanager</PageTitle>
+<h1>Group Management</h1>
+
+<div style="max-width:520px">
+    <label>Organizational Unit</label>
+    <select @bind="ouDn" @bind:after="Load">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+</div>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="layout2">
+    <div class="panel">
+        <div class="panelhead"><h3>Groups</h3><button @onclick="Load">Refresh</button></div>
+        @if (groups is null) { <p>Loading…</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>Name</th><th>Account</th></tr></thead>
+                <tbody>
+                    @foreach (var g in groups)
+                    {
+                        <tr class="selectable @(sel?.Dn == g.Dn ? "selected" : null)" @onclick="() => Select(g)">
+                            <td>@g.Name</td><td>@g.SamAccountName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="hint">@groups.Count group(s)</p>
+        }
+
+        <hr />
+        <h3>Create group</h3>
+        <label>SAM account name</label><input type="text" @bind="ngSam" placeholder="Sales-Team" />
+        <label>Name</label><input type="text" @bind="ngName" placeholder="Sales Team" />
+        <label>Scope</label>
+        <select @bind="ngScope">
+            <option value="Global">Global</option>
+            <option value="DomainLocal">Domain local</option>
+            <option value="Universal">Universal</option>
+        </select>
+        <label>Type</label>
+        <select @bind="ngKind">
+            <option value="Security">Security</option>
+            <option value="Distribution">Distribution</option>
+        </select>
+        <div class="hint">Created in the selected OU.</div>
+        <div class="btnrow"><button class="primary" @onclick="CreateGroup" disabled="@(string.IsNullOrWhiteSpace(ngSam) || string.IsNullOrWhiteSpace(ngName))">Create group</button></div>
+    </div>
+
+    <div class="panel">
+        @if (sel is null) { <p class="muted">Select a group to manage.</p> }
+        else
+        {
+            <h3>@sel.Name</h3>
+            <p class="hint">@sel.Dn</p>
+
+            <label>Add member</label>
+            <select @bind="addDn">
+                <option value="">— select a user —</option>
+                @if (allUsers is not null)
+                {
+                    @foreach (var u in allUsers)
+                    {
+                        <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
+                    }
+                }
+            </select>
+            <div class="btnrow"><button class="primary" @onclick="Add" disabled="@string.IsNullOrEmpty(addDn)">Add to group</button></div>
+
+            <h3 style="margin-top:14px">Members</h3>
+            @if (members is null) { <p>Loading…</p> }
+            else if (members.Count == 0) { <p class="muted">No members.</p> }
+            else
+            {
+                <table>
+                    <tbody>
+                        @foreach (var m in members)
+                        {
+                            <tr><td>@m.DisplayName</td><td>@m.SamAccountName</td>
+                                <td><button class="danger" @onclick="() => Remove(m.Dn)">Remove</button></td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <hr />
+            <label>Rename (new CN)</label><input type="text" @bind="renameTo" />
+            <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
+            <label>Move to OU</label>
+            <select @bind="moveTo">
+                <option value="@Ui.BaseDn">(domain root)</option>
+                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+                {
+                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+                }
+            </select>
+            <div class="btnrow"><button @onclick="Move">Move</button></div>
+
+            <hr />
+            @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete group…</button> }
+            else
+            {
+                <div class="banner err">Delete group <b>@sel.SamAccountName</b>?</div>
+                <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private List<AdGroupSummary>? groups;
+    private List<AdUserSummary>? allUsers;
+    private List<AdUserSummary>? members;
+    private AdGroupSummary? sel;
+    private string ouDn = "", addDn = "", renameTo = "", moveTo = "";
+    private string ngSam = "", ngName = "", ngScope = "Global", ngKind = "Security";
+    private string? banner; private bool ok; private bool confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        ouDn = ous.Any(o => o.Dn == Ui.GroupsOu) ? Ui.GroupsOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
+        allUsers = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList();
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try { groups = (await Dir.ListGroupsAsync(ouDn, subtree: true)).ToList(); sel = null; members = null; }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task Select(AdGroupSummary g)
+    {
+        sel = g; banner = null; addDn = ""; renameTo = ""; moveTo = ouDn; confirmDelete = false;
+        await LoadMembers();
+    }
+
+    private async Task LoadMembers() => members = (await Dir.ListGroupMembersAsync(sel!.Dn)).ToList();
+
+    private async Task Add() { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), sel!.Dn, new[] { addDn }, Array.Empty<string>())); addDn = ""; await LoadMembers(); }
+    private async Task Remove(string dn) { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), sel!.Dn, Array.Empty<string>(), new[] { dn })); await LoadMembers(); }
+    private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }
+    private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
+    private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
+
+    private async Task CreateGroup()
+    {
+        var scope = Enum.Parse<GroupScope>(ngScope);
+        var kind = Enum.Parse<GroupKind>(ngKind);
+        Show(await Mgmt.CreateGroupAsync(await Actor(), new CreateGroupRequest(ouDn, ngSam.Trim(), ngName.Trim(), scope, kind)));
+        ngSam = ""; ngName = ""; await Load();
+    }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

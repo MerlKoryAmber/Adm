@@ -1,0 +1,200 @@
+@page "/delegation"
+@inject IRbacStore Store
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+
+<PageTitle>Delegation — admanager</PageTitle>
+<h1>Delegation</h1>
+<p class="subtitle">Help-desk roles (task sets) → scopes (OUs) → assignments (technician SID / AD group SID). Super-admins bypass.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+@if (cfg is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="layout2">
+        <div class="panel">
+            <h3>Roles</h3>
+            @if (cfg.Roles.Count == 0) { <p class="muted">No roles.</p> }
+            else
+            {
+                <table><tbody>
+                    @foreach (var r in cfg.Roles)
+                    {
+                        <tr><td><b>@r.Name</b><div class="hint">@string.Join(", ", r.Permissions)</div></td>
+                            <td><button class="danger" @onclick="() => DeleteRole(r.Id)">Delete</button></td></tr>
+                    }
+                </tbody></table>
+            }
+            <hr />
+            <h3>New role</h3>
+            <label>Name</label><input type="text" @bind="roleName" placeholder="Help Desk L1" />
+            <label>Permissions</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:4px">
+                @foreach (var p in AllPerms)
+                {
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
+                        <input type="checkbox" checked="@rolePerms.Contains(p)" @onchange="e => TogglePerm(p, e)" /> @p
+                    </label>
+                }
+            </div>
+            <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || rolePerms.Count == 0)">Create role</button></div>
+        </div>
+
+        <div class="panel">
+            <h3>Scopes</h3>
+            @if (cfg.Scopes.Count == 0) { <p class="muted">No scopes.</p> }
+            else
+            {
+                <table><tbody>
+                    @foreach (var s in cfg.Scopes)
+                    {
+                        <tr><td><b>@s.Name</b><div class="hint">@string.Join("; ", s.OuDns)@(s.IncludeSubtree ? " (subtree)" : "")</div></td>
+                            <td><button class="danger" @onclick="() => DeleteScope(s.Id)">Delete</button></td></tr>
+                    }
+                </tbody></table>
+            }
+            <hr />
+            <h3>New scope</h3>
+            <label>Name</label><input type="text" @bind="scopeName" placeholder="Sales OU" />
+            <label>OUs</label>
+            <div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:5px;padding:6px;margin-top:4px">
+                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+                {
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
+                        <input type="checkbox" checked="@scopeOus.Contains(o.Dn)" @onchange="e => ToggleOu(o.Dn, e)" />
+                        <span>@IndentStr(o.Depth)@o.Name</span>
+                    </label>
+                }
+            </div>
+            <div class="checkbox"><input type="checkbox" id="sub" @bind="scopeSubtree" /><label for="sub">Include subtree</label></div>
+            <div class="btnrow"><button class="primary" @onclick="CreateScope" disabled="@(string.IsNullOrWhiteSpace(scopeName) || scopeOus.Count == 0)">Create scope</button></div>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+        <h3>Assignments</h3>
+        @if (cfg.Assignments.Count == 0) { <p class="muted">No assignments.</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>Subject</th><th>Type</th><th>Role</th><th>Scope</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var a in cfg.Assignments)
+                    {
+                        <tr>
+                            <td style="word-break:break-all">@a.SubjectSid</td>
+                            <td>@a.SubjectType</td>
+                            <td>@RoleName(a.RoleId)</td>
+                            <td>@ScopeName(a.ScopeId)</td>
+                            <td><button class="danger" @onclick="() => DeleteAssignment(a.Id)">Delete</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        <hr />
+        <h3>New assignment</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
+            <div>
+                <label>Subject type</label>
+                <select @bind="asgType">
+                    <option value="Technician">Technician (user SID)</option>
+                    <option value="AdGroup">AD group (group SID)</option>
+                </select>
+            </div>
+            <div>
+                <label>Subject SID</label>
+                <input type="text" @bind="asgSid" placeholder="S-1-5-21-…" />
+            </div>
+            <div>
+                <label>Role</label>
+                <select @bind="asgRole">
+                    <option value="">— role —</option>
+                    @foreach (var r in cfg.Roles) { <option value="@r.Id">@r.Name</option> }
+                </select>
+            </div>
+            <div>
+                <label>Scope</label>
+                <select @bind="asgScope">
+                    <option value="">— scope —</option>
+                    @foreach (var s in cfg.Scopes) { <option value="@s.Id">@s.Name</option> }
+                </select>
+            </div>
+        </div>
+        <div class="hint" style="margin-top:6px">SID — из claims техника/группы. Домен-админы и супер-админы (@string.Join(", ", SuperNames)) имеют полный доступ без назначений.</div>
+        <div class="btnrow"><button class="primary" @onclick="CreateAssignment" disabled="@(string.IsNullOrWhiteSpace(asgSid) || string.IsNullOrEmpty(asgRole) || string.IsNullOrEmpty(asgScope))">Create assignment</button></div>
+    </div>
+}
+
+@code {
+    private RbacConfig? cfg;
+    private List<AdOuNode>? ous;
+    private string? banner; private bool ok;
+
+    private static readonly Permission[] AllPerms = Enum.GetValues<Permission>();
+    private static readonly string[] SuperNames = { "merl", "Domain Admins" };
+
+    private string roleName = "";
+    private readonly HashSet<Permission> rolePerms = new();
+
+    private string scopeName = "";
+    private readonly HashSet<string> scopeOus = new();
+    private bool scopeSubtree = true;
+
+    private string asgType = "Technician", asgSid = "", asgRole = "", asgScope = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        cfg = await Store.LoadAsync();
+        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
+    }
+
+    private string RoleName(Guid id) => cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? "?";
+    private string ScopeName(Guid id) => cfg!.Scopes.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
+
+    private void TogglePerm(Permission p, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) rolePerms.Add(p); else rolePerms.Remove(p); }
+    private void ToggleOu(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) scopeOus.Add(dn); else scopeOus.Remove(dn); }
+
+    private async Task CreateRole()
+    {
+        cfg!.Roles.Add(new HelpDeskRole { Name = roleName.Trim(), Permissions = new HashSet<Permission>(rolePerms) });
+        await Save("Role created."); roleName = ""; rolePerms.Clear();
+    }
+    private async Task DeleteRole(Guid id) { cfg!.Roles.RemoveAll(r => r.Id == id); await Save("Role deleted."); }
+
+    private async Task CreateScope()
+    {
+        cfg!.Scopes.Add(new DelegationScope { Name = scopeName.Trim(), OuDns = scopeOus.ToList(), IncludeSubtree = scopeSubtree });
+        await Save("Scope created."); scopeName = ""; scopeOus.Clear(); scopeSubtree = true;
+    }
+    private async Task DeleteScope(Guid id) { cfg!.Scopes.RemoveAll(s => s.Id == id); await Save("Scope deleted."); }
+
+    private async Task CreateAssignment()
+    {
+        cfg!.Assignments.Add(new RoleAssignment
+        {
+            SubjectType = Enum.Parse<SubjectType>(asgType),
+            SubjectSid = asgSid.Trim(),
+            RoleId = Guid.Parse(asgRole),
+            ScopeId = Guid.Parse(asgScope),
+        });
+        await Save("Assignment created."); asgSid = ""; asgRole = ""; asgScope = "";
+    }
+    private async Task DeleteAssignment(Guid id) { cfg!.Assignments.RemoveAll(a => a.Id == id); await Save("Assignment deleted."); }
+
+    private async Task Save(string msg)
+    {
+        try { await Store.SaveAsync(cfg!); ok = true; banner = msg; }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+        cfg = await Store.LoadAsync();
+    }
+
+    private static string IndentStr(int d) => new string(' ', d * 2);
+}

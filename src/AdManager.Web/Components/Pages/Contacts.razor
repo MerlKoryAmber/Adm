@@ -1,0 +1,95 @@
+@page "/contacts"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+
+<PageTitle>Contact Management — admanager</PageTitle>
+<h1>Contact Management</h1>
+
+<div style="max-width:520px">
+    <label>Organizational Unit</label>
+    <select @bind="ouDn" @bind:after="Load">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+</div>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="layout2">
+    <div class="panel">
+        <div class="panelhead"><h3>Contacts</h3><button @onclick="Load">Refresh</button></div>
+        @if (items is null) { <p>Loading…</p> }
+        else if (items.Count == 0) { <p class="muted">No contacts.</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in items)
+                    {
+                        <tr><td>@c.Name</td><td>@(c.Mail ?? "—")</td>
+                            <td><button class="danger" @onclick="() => Delete(c.Dn)">Delete</button></td></tr>
+                    }
+                </tbody>
+            </table>
+            <p class="hint">@items.Count contact(s)</p>
+        }
+    </div>
+
+    <div class="panel">
+        <h3>Create contact</h3>
+        <label>Display name</label>
+        <input type="text" @bind="name" placeholder="John Vendor" />
+        <label>Email</label>
+        <input type="text" @bind="mail" placeholder="john@vendor.com" />
+        <div class="hint">Created in the selected OU.</div>
+        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(name)">Create contact</button></div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private List<AdContactSummary>? items;
+    private string ouDn = "", name = "", mail = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        ouDn = ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try { items = (await Dir.ListContactsAsync(ouDn, subtree: true)).ToList(); }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task Create()
+    {
+        var attrs = new Dictionary<string, string?> { ["mail"] = mail };
+        Show(await Mgmt.CreateContactAsync(await Actor(), new CreateContactRequest(ouDn, name.Trim(), attrs)));
+        name = ""; mail = ""; await Load();
+    }
+
+    private async Task Delete(string dn) { Show(await Mgmt.DeleteObjectAsync(await Actor(), dn)); await Load(); }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

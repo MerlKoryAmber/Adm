@@ -1,0 +1,114 @@
+@page "/ous"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+
+<PageTitle>OU Management — admanager</PageTitle>
+<h1>OU Management</h1>
+<p class="subtitle">Base: <code>@Ui.BaseDn</code></p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="layout2">
+    <div class="panel">
+        <div class="panelhead"><h3>Organizational Units</h3><button @onclick="Load">Refresh</button></div>
+        @if (ous is null) { <p>Loading…</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>Name</th><th>DN</th></tr></thead>
+                <tbody>
+                    @foreach (var o in ous)
+                    {
+                        <tr class="selectable @(sel?.Dn == o.Dn ? "selected" : null)" @onclick="() => Select(o)">
+                            <td>@Indent(o.Depth)@o.Name</td>
+                            <td style="word-break:break-all">@o.Dn</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="hint">@ous.Count OU(s)</p>
+        }
+
+        <hr />
+        <h3>Create OU</h3>
+        <label>Parent</label>
+        <select @bind="parentDn">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <label>Name</label>
+        <input type="text" @bind="newName" placeholder="Sales" />
+        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create OU</button></div>
+    </div>
+
+    <div class="panel">
+        @if (sel is null) { <p class="muted">Select an OU to manage.</p> }
+        else
+        {
+            <h3>@sel.Name</h3>
+            <p class="hint">@sel.Dn</p>
+
+            <label>Rename (new OU name)</label>
+            <input type="text" @bind="renameTo" />
+            <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
+
+            <label>Move under</label>
+            <select @bind="moveTo">
+                <option value="@Ui.BaseDn">(domain root)</option>
+                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+                {
+                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+                }
+            </select>
+            <div class="btnrow"><button @onclick="Move">Move</button></div>
+
+            <hr />
+            @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete…</button> }
+            else
+            {
+                <div class="banner err">Delete <b>@sel.Name</b> and everything under it?</div>
+                <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private AdOuNode? sel;
+    private string parentDn = "", newName = "", renameTo = "", moveTo = "";
+    private string? banner; private bool ok; private bool confirmDelete;
+
+    protected override async Task OnInitializedAsync() { parentDn = Ui.BaseDn; await Load(); }
+
+    private async Task Load()
+    {
+        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); sel = null; }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private void Select(AdOuNode o) { sel = o; banner = null; confirmDelete = false; renameTo = ""; moveTo = Ui.BaseDn; }
+
+    private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"OU={renameTo}")); await Load(); }
+    private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
+    private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
+    private async Task Create() { Show(await Mgmt.CreateOuAsync(await Actor(), new CreateOuRequest(parentDn, newName.Trim()))); newName = ""; await Load(); }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

@@ -1,0 +1,62 @@
+@page "/audit"
+@inject IAuditLog AuditLog
+
+<PageTitle>Audit — admanager</PageTitle>
+<h1>Audit</h1>
+<p class="hint">Every delegated operation (attempt &amp; result). Times in MSK (UTC+3).</p>
+
+<div class="btnrow" style="margin-bottom:10px"><button @onclick="Load">Refresh</button></div>
+
+@if (rows is null)
+{
+    <p>Loading…</p>
+}
+else if (rows.Count == 0)
+{
+    <p class="muted">No audit records yet.</p>
+}
+else
+{
+    <div class="panel">
+        <table>
+            <thead>
+                <tr><th>Time (MSK)</th><th>Actor</th><th>Operation</th><th>Phase</th><th>Target</th><th>Result</th><th>Message</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var e in rows)
+                {
+                    <tr>
+                        <td>@e.TimestampMsk.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@e.ActorName</td>
+                        <td>@e.Operation</td>
+                        <td>@e.Phase</td>
+                        <td style="max-width:320px;word-break:break-all">@e.TargetDn</td>
+                        <td>
+                            @if (e.Phase == AuditPhase.Attempt)
+                            {
+                                <span class="badge warn">attempt</span>
+                            }
+                            else
+                            {
+                                <span class="badge @(e.Success ? "ok" : "off")">@(e.Success ? "success" : "fail")</span>
+                            }
+                        </td>
+                        <td>@e.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="hint">@rows.Count record(s)</p>
+    </div>
+}
+
+@code {
+    private List<AuditEntry>? rows;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        rows = (await AuditLog.QueryAsync(new AuditQuery(Take: 200))).ToList();
+    }
+}

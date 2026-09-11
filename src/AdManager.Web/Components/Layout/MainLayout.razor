@@ -1,0 +1,45 @@
+@inherits LayoutComponentBase
+@inject UiOptions Ui
+
+<div class="shell">
+    <header class="topbar">
+        <div class="logo">ADManager<span>·lab</span></div>
+        <nav class="tabs">
+            <a class="tab active" href="users">Management</a>
+            <a class="tab" href="reports">Reports</a>
+            <a class="tab" href="delegation">Delegation</a>
+            <a class="tab" href="automation">Automation</a>
+        </nav>
+        <div class="topright">
+            <span class="domainchip">Domain: @Ui.Domain</span>
+            <AuthorizeView>
+                <Authorized><span class="who">@context.User.Identity?.Name</span></Authorized>
+                <NotAuthorized><span class="who">not signed in</span></NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </header>
+
+    <div class="body">
+        <aside class="tree">
+            <div class="treegroup">User Management</div>
+            <NavLink class="treeitem" href="users" Match="NavLinkMatch.All">All users</NavLink>
+            <NavLink class="treeitem" href="users/create">Create user</NavLink>
+            <div class="treegroup">Group Management</div>
+            <NavLink class="treeitem" href="groups">Groups</NavLink>
+            <div class="treegroup">Computer Management</div>
+            <NavLink class="treeitem" href="computers">Computers</NavLink>
+            <div class="treegroup">OU Management</div>
+            <NavLink class="treeitem" href="ous">Organizational Units</NavLink>
+            <div class="treegroup">Contact Management</div>
+            <NavLink class="treeitem" href="contacts">Contacts</NavLink>
+            <div class="treegroup">Exchange</div>
+            <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
+            <div class="treegroup">Logs</div>
+            <NavLink class="treeitem" href="audit">Audit</NavLink>
+        </aside>
+
+        <main class="content">
+            @Body
+        </main>
+    </div>
+</div>

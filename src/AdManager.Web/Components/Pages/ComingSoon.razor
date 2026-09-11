@@ -1,0 +1,31 @@
+@page "/reports"
+
+<PageTitle>admanager</PageTitle>
+<h1>@Title</h1>
+<p class="subtitle">@Blurb</p>
+
+<div class="panel">
+    <p class="muted">This module is on the roadmap. Current build focuses on on-prem AD management &amp; delegation pipeline.</p>
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string Title => Seg switch
+    {
+        "reports" => "Reports",
+        "delegation" => "Delegation",
+        "automation" => "Automation",
+        _ => "Coming soon"
+    };
+
+    private string Blurb => Seg switch
+    {
+        "reports" => "200+ prebuilt AD reports (planned).",
+        "delegation" => "Help-desk roles &amp; OU-scoped delegation (Phase 2).",
+        "automation" => "Scheduled & rule-based tasks (Phase 4).",
+        _ => ""
+    };
+
+    private string Seg => new Uri(Nav.Uri).AbsolutePath.Trim('/').ToLowerInvariant();
+}

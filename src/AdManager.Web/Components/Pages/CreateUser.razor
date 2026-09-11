@@ -1,0 +1,94 @@
+@page "/users/create"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Create user — admanager</PageTitle>
+<h1>Create user</h1>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:540px">
+    <label>Target OU</label>
+    <select @bind="ouDn">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+
+    <label>SAM account name</label>
+    <input type="text" @bind="sam" placeholder="j.doe" />
+    <div class="hint">Logon name (pre-Windows 2000). Required.</div>
+
+    <label>Display name</label>
+    <input type="text" @bind="display" placeholder="John Doe" />
+
+    <label>User principal name</label>
+    <input type="text" @bind="upn" placeholder="@SamPreview" />
+    <div class="hint">Defaults to <code>@SamPreview</code> if left blank.</div>
+
+    <label>Initial password</label>
+    <input type="password" @bind="password" />
+    <div class="hint">Must meet the domain password policy. Required to enable the account.</div>
+
+    <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
+    <div class="checkbox"><input type="checkbox" id="mc" @bind="mustChange" /><label for="mc">Must change password at next logon</label></div>
+
+    <label>Department</label><input type="text" @bind="dept" />
+    <label>Title</label><input type="text" @bind="title" />
+
+    <div class="btnrow">
+        <button class="primary" @onclick="Create" disabled="@(!CanCreate)">Create user</button>
+        <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private string ouDn = "";
+    private string sam = "", display = "", upn = "", password = "", dept = "", title = "";
+    private bool enabled = true, mustChange;
+    private string? banner; private bool ok;
+
+    private string SamPreview => (string.IsNullOrWhiteSpace(sam) ? "user" : sam) + "@" + Ui.Domain;
+    private bool CanCreate => !string.IsNullOrWhiteSpace(sam) && !string.IsNullOrWhiteSpace(display);
+
+    protected override async Task OnInitializedAsync()
+    {
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
+    }
+
+    private async Task Create()
+    {
+        var principal = AuthState is null ? null : (await AuthState).User;
+        var actor = CurrentUser.From(principal);
+        var req = new CreateUserRequest(
+            ouDn, sam.Trim(), display.Trim(),
+            string.IsNullOrWhiteSpace(upn) ? SamPreview : upn.Trim(),
+            InitialPassword: string.IsNullOrEmpty(password) ? null : password,
+            Enabled: enabled,
+            Attributes: new Dictionary<string, string?> { ["department"] = dept, ["title"] = title });
+
+        var r = await Mgmt.CreateUserAsync(actor, req);
+        ok = r.Success;
+        banner = r.Success ? $"User '{sam}' created." : ("Error: " + r.Message);
+
+        if (r.Success && mustChange)
+        {
+            var dn = $"CN={display.Trim()},{ouDn}";
+            await Mgmt.SetAccountOptionsAsync(actor, dn, new AccountOptions(MustChangePasswordAtNextLogon: true));
+        }
+        if (r.Success) { sam = display = upn = password = dept = title = ""; }
+    }
+
+    private static string Indent(int d) => new string(' ', d * 3);
+}
