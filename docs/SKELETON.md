@@ -1,6 +1,6 @@
 # SKELETON.md — структурная карта admanager
 
-Обновлено: 2026-09-11 МСК. Читать перед задачей, чинить перед push (§22).
+Обновлено: 2026-09-12 МСК. Читать перед задачей, чинить перед push (§22).
 
 Веб-панель управления и делегирования on-prem AD + Exchange 2019. Аналог ManageEngine ADManager Plus.
 UI — английский, тёмная тема (палитра squid-panel), макет ADManager Plus (см. ADR-0003).
@@ -19,7 +19,7 @@ Web ─► Infrastructure.* (DI-композиция)
 | `AdManager.Application` | net8.0 | Контракты + DTO + сервисы приложения (см. ниже). |
 | `AdManager.Infrastructure.Ad` | net8.0-windows | `AdService` (write-операции S.DS), `AdDirectory` (чтение), `Ldap` (bind). |
 | `AdManager.Infrastructure.Exchange` | net8.0-windows | `ExchangeService` (remote PowerShell). **Рантайм не верифицирован** (нет сервера). |
-| `AdManager.Infrastructure.Data` | net8.0 | EF `AdManagerDbContext` + `EfAuditLog`; файловые сторы `FileAuditLog`, `FileRbacStore`, `FileAutomationStore`. |
+| `AdManager.Infrastructure.Data` | net8.0 | EF `AdManagerDbContext` + `EfAuditLog`; файловые сторы `FileAuditLog`, `FileRbacStore`, `FileAutomationStore`, `FileUserTemplateStore`. |
 | `AdManager.Infrastructure.Automation` | net8.0 | `AutomationScheduler` (BackgroundService + NCrontab). |
 | `AdManager.Web` | net8.0-windows | Blazor Server, Windows Auth, DI, страницы. |
 | `tests/AdManager.Domain.Tests` | net8.0 | xUnit (smoke). |
@@ -35,6 +35,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
 - `IOperationalCredentialProvider` (+ `ConfiguredCredentialProvider`) — gMSA / StoredCredential.
 - `IAutomationScheduler` (+ `AutomationScheduler`), `IAutomationStore` (+ `FileAutomationStore`).
+- `IUserTemplateStore` (+ `FileUserTemplateStore`) — шаблоны формы пользователя (Layout View). Модель: `UserTemplate` (Name/Kind/Description/`Tabs`), `TemplateTab` (Title + список ключей полей), каталог `FieldCatalog` (`FieldDef` Key/Label/Category). `Templates.cs`.
 
 Сервисы-обёртки (RBAC + двухфазный аудит вокруг каждой операции):
 - `AdManagementService` — все AD-операции (актор-aware).
@@ -45,8 +46,12 @@ Web ─► Infrastructure.* (DI-композиция)
 | Route | Назначение |
 |-------|------------|
 | `/` Home | обзор. |
-| `/users` | User Management: список (OU-селектор), reset/unlock/enable/disable, attrs, account options, rename/move, delete, **bulk** (enable/disable/unlock/move/delete). |
-| `/users/create` | создание пользователя (OU-выбор). |
+| `/users` | Users: полноширинный грид всех пользователей домена, поиск + фильтры Locked/Disabled only + пагинация (50/стр), **bulk** (enable/disable/unlock/reset pwd/move/delete), «Modify ▸» на строке. |
+| `/users/modify` | правка атрибутов (табы General/Account/Address/Telephones/Organization/Profile) + account options. |
+| `/users/create` | создание пользователя, табовая форма (как modify) + целевой OU. |
+| `/users/bulk` | массовое создание из CSV. |
+| `/templates`, `/templates/edit` | **Form templates**: список (edit/copy/delete) + Layout-редактор (Field Tray → вкладки, переименование/добавление/перемещение вкладок, ↑↓ полей). Store — `App_Data/user-templates.json`. |
+| `/search` | Advanced search по атрибутам. |
 | `/groups` | Group Management: create group, membership, rename/move/delete. |
 | `/computers` | Computer Management: create, enable/disable, rename/move/delete. |
 | `/ous` | OU Management: create/rename/move/delete. |

@@ -1,0 +1,98 @@
+@page "/templates"
+@inject IUserTemplateStore Store
+@inject NavigationManager Nav
+
+<PageTitle>Templates — admanager</PageTitle>
+<h1>User form templates</h1>
+<p class="subtitle">Layouts for the create/modify user forms: which fields sit on which tab, and the tab names.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="toolbar">
+    <span class="grow"></span>
+    <button class="primary" @onclick="CreateNew">+ Create new template</button>
+</div>
+
+@if (items is null)
+{
+    <p>Loading…</p>
+}
+else if (items.Count == 0)
+{
+    <div class="panel">No templates yet. Create one to lay out the user form.</div>
+}
+else
+{
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
+            <table>
+                <thead>
+                    <tr><th>Template name</th><th>Kind</th><th>Description</th><th>Tabs</th><th>Last modified</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in items)
+                    {
+                        <tr>
+                            <td>@t.Name</td>
+                            <td><span class="badge">@t.Kind</span></td>
+                            <td>@(string.IsNullOrWhiteSpace(t.Description) ? "—" : t.Description)</td>
+                            <td>@t.Tabs.Count (@t.Tabs.Sum(x => x.Fields.Count) fields)</td>
+                            <td>@t.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="rowactions">
+                                <button class="linkbtn" @onclick="() => Edit(t.Id)">Edit</button>
+                                <button class="linkbtn" @onclick="() => Copy(t)">Copy</button>
+                                @if (confirmDel == t.Id)
+                                {
+                                    <button class="linkbtn danger" @onclick="() => Delete(t.Id)">Confirm</button>
+                                    <button class="linkbtn" @onclick="() => confirmDel = null">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button class="linkbtn danger" @onclick="() => confirmDel = t.Id">Delete</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserTemplate>? items;
+    private Guid? confirmDel;
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload() => items = await Store.ListAsync();
+
+    private void CreateNew() => Nav.NavigateTo("templates/edit");
+    private void Edit(Guid id) => Nav.NavigateTo($"templates/edit?id={id}");
+
+    private async Task Copy(UserTemplate src)
+    {
+        var clone = new UserTemplate
+        {
+            Name = src.Name + " (copy)",
+            Description = src.Description,
+            Kind = src.Kind,
+            Tabs = src.Tabs.Select(t => new TemplateTab { Title = t.Title, Fields = new(t.Fields) }).ToList(),
+        };
+        await Store.SaveAsync(clone);
+        ok = true; banner = $"Copied '{src.Name}'.";
+        await Reload();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        confirmDel = null;
+        await Store.DeleteAsync(id);
+        ok = true; banner = "Template deleted.";
+        await Reload();
+    }
+}

@@ -1,0 +1,189 @@
+@page "/templates/edit"
+@inject IUserTemplateStore Store
+@inject NavigationManager Nav
+
+<PageTitle>Template editor — admanager</PageTitle>
+<h1>@(isNew ? "New template" : "Edit template")</h1>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:820px">
+    <label>Template name *</label>
+    <input type="text" @bind="tpl.Name" placeholder="e.g. HR user creation" />
+    <div class="grid2">
+        <div>
+            <label>Applies to</label>
+            <select @bind="tpl.Kind">
+                <option value="Create">Create user form</option>
+                <option value="Modify">Modify user form</option>
+            </select>
+        </div>
+    </div>
+    <label>Description</label>
+    <textarea rows="2" @bind="tpl.Description" placeholder="What this layout is for."></textarea>
+</div>
+
+<h3 style="margin:18px 0 8px">Layout view</h3>
+<div class="layout">
+    <!-- Field tray -->
+    <div class="tray">
+        <div class="trayhead">Field tray</div>
+        <div class="hint" style="padding:0 10px 8px">Click a field to add it to the selected tab.</div>
+        @foreach (var cat in FieldCatalog.Categories)
+        {
+            <div class="traygroup">@cat</div>
+            <div class="chips">
+                @foreach (var f in FieldCatalog.All.Where(x => x.Category == cat))
+                {
+                    var isPlaced = Placed.Contains(f.Key);
+                    <button class="chip @(isPlaced ? "placed" : null)" disabled="@isPlaced"
+                            title="@f.Key" @onclick="() => AddField(f.Key)">
+                        @f.Label @(isPlaced ? "✓" : "")
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Tabs + fields -->
+    <div class="canvas">
+        <div class="tabbar">
+            @for (int i = 0; i < tpl.Tabs.Count; i++)
+            {
+                var idx = i;
+                <button class="tabbtn @(sel == idx ? "on" : null)" @onclick="() => sel = idx">
+                    @(string.IsNullOrWhiteSpace(tpl.Tabs[idx].Title) ? "(untitled)" : tpl.Tabs[idx].Title)
+                </button>
+            }
+            <button class="tabbtn add" @onclick="AddTab">+ Add tab</button>
+        </div>
+
+        @if (tpl.Tabs.Count > 0)
+        {
+            var tab = tpl.Tabs[sel];
+            <div class="panel">
+                <div class="toolbar" style="margin-top:0">
+                    <label style="margin:0">Tab title</label>
+                    <input type="text" class="grow" @bind="tab.Title" @bind:event="oninput" placeholder="Tab name" />
+                    <button class="linkbtn" @onclick="() => MoveTab(-1)" disabled="@(sel == 0)">◀ move</button>
+                    <button class="linkbtn" @onclick="() => MoveTab(1)" disabled="@(sel == tpl.Tabs.Count - 1)">move ▶</button>
+                    @if (confirmTabDel) { <button class="linkbtn danger" @onclick="DeleteTab">Confirm delete tab</button> <button class="linkbtn" @onclick="() => confirmTabDel = false">Cancel</button> }
+                    else { <button class="linkbtn danger" @onclick="() => confirmTabDel = true" disabled="@(tpl.Tabs.Count <= 1)">Delete tab</button> }
+                </div>
+
+                @if (tab.Fields.Count == 0)
+                {
+                    <div class="hint" style="padding:12px 0">No fields. Add them from the tray on the left.</div>
+                }
+                else
+                {
+                    <div class="fieldlist">
+                        @for (int j = 0; j < tab.Fields.Count; j++)
+                        {
+                            var fi = j; var key = tab.Fields[fi];
+                            <div class="fieldrow">
+                                <span class="fname">@FieldCatalog.Label(key)</span>
+                                <span class="fkey">@key</span>
+                                <span class="grow"></span>
+                                <button class="linkbtn" @onclick="() => MoveField(fi, -1)" disabled="@(fi == 0)">↑</button>
+                                <button class="linkbtn" @onclick="() => MoveField(fi, 1)" disabled="@(fi == tab.Fields.Count - 1)">↓</button>
+                                <button class="linkbtn danger" @onclick="() => RemoveField(key)">×</button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="btnrow" style="margin-top:16px">
+    <button class="primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(tpl.Name)">Save template</button>
+    <button @onclick='() => Nav.NavigateTo("templates")'>Back to templates</button>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] private Guid? Id { get; set; }
+
+    private UserTemplate tpl = new();
+    private bool isNew = true;
+    private int sel;
+    private bool confirmTabDel;
+    private string? banner; private bool ok;
+
+    private HashSet<string> Placed => tpl.Tabs.SelectMany(t => t.Fields).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id is Guid id && await Store.GetAsync(id) is { } found)
+        {
+            tpl = found; isNew = false;
+        }
+        else
+        {
+            tpl = new UserTemplate
+            {
+                Kind = "Create",
+                Tabs = new()
+                {
+                    new TemplateTab { Title = "General", Fields = { "givenName", "sn", "displayName", "description", "mail" } },
+                    new TemplateTab { Title = "Account", Fields = { "sAMAccountName", "userPrincipalName", "__password", "__enabled" } },
+                    new TemplateTab { Title = "Contact", Fields = { "telephoneNumber", "mobile", "physicalDeliveryOfficeName" } },
+                },
+            };
+        }
+        if (tpl.Tabs.Count == 0) tpl.Tabs.Add(new TemplateTab { Title = "General" });
+        sel = 0;
+    }
+
+    private void AddField(string key)
+    {
+        if (Placed.Contains(key)) return;
+        tpl.Tabs[sel].Fields.Add(key);
+    }
+
+    private void RemoveField(string key) => tpl.Tabs[sel].Fields.Remove(key);
+
+    private void MoveField(int index, int delta)
+    {
+        var list = tpl.Tabs[sel].Fields;
+        var to = index + delta;
+        if (to < 0 || to >= list.Count) return;
+        (list[index], list[to]) = (list[to], list[index]);
+    }
+
+    private void AddTab()
+    {
+        tpl.Tabs.Add(new TemplateTab { Title = $"Tab {tpl.Tabs.Count + 1}" });
+        sel = tpl.Tabs.Count - 1;
+        confirmTabDel = false;
+    }
+
+    private void DeleteTab()
+    {
+        if (tpl.Tabs.Count <= 1) return;
+        tpl.Tabs.RemoveAt(sel);
+        if (sel >= tpl.Tabs.Count) sel = tpl.Tabs.Count - 1;
+        confirmTabDel = false;
+    }
+
+    private void MoveTab(int delta)
+    {
+        var to = sel + delta;
+        if (to < 0 || to >= tpl.Tabs.Count) return;
+        (tpl.Tabs[sel], tpl.Tabs[to]) = (tpl.Tabs[to], tpl.Tabs[sel]);
+        sel = to;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(tpl.Name)) { ok = false; banner = "Name is required."; return; }
+        for (int i = 0; i < tpl.Tabs.Count; i++)
+            if (string.IsNullOrWhiteSpace(tpl.Tabs[i].Title)) tpl.Tabs[i].Title = $"Tab {i + 1}";
+        await Store.SaveAsync(tpl);
+        Nav.NavigateTo("templates");
+    }
+}

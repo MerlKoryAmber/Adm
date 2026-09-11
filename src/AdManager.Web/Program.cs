@@ -97,6 +97,12 @@ else
 var autoPath = builder.Configuration["Automation:FilePath"]
                ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "automation.json");
 builder.Services.AddSingleton<IAutomationStore>(new FileAutomationStore(autoPath));
+
+// Шаблоны формы пользователя (Layout View).
+var tplPath = builder.Configuration["Templates:FilePath"]
+              ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "user-templates.json");
+builder.Services.AddSingleton<IUserTemplateStore>(new FileUserTemplateStore(tplPath));
+
 builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationScheduler>());

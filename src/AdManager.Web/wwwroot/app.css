@@ -127,3 +127,23 @@ a { color: var(--link); }
 .tabbtn { background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; padding: 7px 14px; color: var(--muted); font-size: 13.5px; }
 .tabbtn:hover { color: var(--text); }
 .tabbtn.on { background: var(--surface-hover); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.tabbtn.add { border-radius: 6px; color: var(--accent); }
+
+/* Row actions in grids */
+.rowactions { display: flex; gap: 10px; white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Template layout editor */
+.layout { display: flex; gap: 16px; align-items: flex-start; }
+.tray { flex: 0 0 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 0; max-height: calc(100vh - 320px); overflow-y: auto; }
+.trayhead { font-weight: 600; color: var(--accent); padding: 0 12px 8px; text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
+.traygroup { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 12px 4px; border-top: 1px solid var(--border-light); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px 6px; }
+.chip { background: var(--surface-hover); border: 1px solid var(--border); border-radius: 14px; padding: 4px 10px; color: var(--text); font-size: 12.5px; cursor: pointer; }
+.chip:hover:not(.placed) { border-color: var(--accent); color: var(--accent); }
+.chip.placed { background: rgba(61,170,109,.16); border-color: rgba(61,170,109,.5); color: var(--ok); cursor: default; opacity: .8; }
+.canvas { flex: 1; min-width: 0; }
+.fieldlist { display: flex; flex-direction: column; gap: 4px; }
+.fieldrow { display: flex; align-items: center; gap: 10px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+.fieldrow .fname { font-weight: 500; }
+.fieldrow .fkey { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
