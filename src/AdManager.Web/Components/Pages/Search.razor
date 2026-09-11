@@ -1,0 +1,63 @@
+@page "/search"
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Search — admanager</PageTitle>
+<h1>Advanced search</h1>
+<p class="subtitle">Users, groups, computers, contacts, OUs by name / account / email under <code>@Ui.BaseDn</code>.</p>
+
+<div style="display:flex;gap:8px;max-width:560px">
+    <input type="text" @bind="term" @bind:after="Run" placeholder="name, sAMAccountName, email…" />
+    <button class="primary" @onclick="Run" disabled="@string.IsNullOrWhiteSpace(term)">Search</button>
+</div>
+
+@if (banner is not null) { <div class="banner err">@banner</div> }
+
+@if (results is not null)
+{
+    <div class="panel" style="margin-top:14px">
+        @if (results.Count == 0) { <p class="muted">No matches.</p> }
+        else
+        {
+            <table>
+                <thead><tr><th>Name</th><th>Account</th><th>Class</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var r in results)
+                    {
+                        <tr>
+                            <td>@r.Name</td>
+                            <td>@(r.SamAccountName ?? "—")</td>
+                            <td>@r.ObjectClass</td>
+                            <td>
+                                @if (r.Enabled is bool en) { <span class="badge @(en ? "ok" : "off")">@(en ? "Enabled" : "Disabled")</span> }
+                                else { <span class="muted">—</span> }
+                            </td>
+                            <td>
+                                @if (r.ObjectClass == "user")
+                                {
+                                    <button @onclick='() => Nav.NavigateTo($"users/modify?dn={Uri.EscapeDataString(r.Dn)}")'>Modify</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p class="hint">@results.Count result(s)</p>
+        }
+    </div>
+}
+
+@code {
+    private string term = "";
+    private List<AdSearchResult>? results;
+    private string? banner;
+
+    private async Task Run()
+    {
+        if (string.IsNullOrWhiteSpace(term)) return;
+        banner = null;
+        try { results = (await Dir.SearchAsync(Ui.BaseDn, term.Trim())).ToList(); }
+        catch (Exception ex) { banner = "Error: " + ex.Message; }
+    }
+}

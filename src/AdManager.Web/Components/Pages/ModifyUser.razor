@@ -1,0 +1,165 @@
+@page "/users/modify"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject NavigationManager Nav
+
+<PageTitle>Modify user — admanager</PageTitle>
+<h1>Modify user</h1>
+<p class="subtitle">@Dn</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+@if (model is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="tabbar">
+        @foreach (var t in Tabs)
+        {
+            <button class="tabbtn @(tab == t ? "on" : null)" @onclick="() => tab = t">@t</button>
+        }
+    </div>
+
+    <div class="panel" style="max-width:640px">
+        @if (tab == "General")
+        {
+            @Field("First name", "givenName")
+            @Field("Initials", "initials")
+            @Field("Last name", "sn")
+            @Field("Display name", "displayName")
+            @Field("Description", "description")
+            @Field("Office", "physicalDeliveryOfficeName")
+            @Field("Telephone", "telephoneNumber")
+            @Field("Email", "mail")
+            @Field("Web page", "wWWHomePage")
+        }
+        else if (tab == "Account")
+        {
+            @Field("User principal name", "userPrincipalName")
+            <div class="hint">Пустой UPN не очищается.</div>
+            <hr />
+            <h3>Account options</h3>
+            <div class="checkbox"><input type="checkbox" id="pne" checked="@pne" @onchange="TogglePne" /><label for="pne">Password never expires</label></div>
+            <div class="btnrow"><button @onclick="ForceChange">Force change at next logon</button></div>
+            <label>Account expires</label>
+            <input type="date" @bind="expiry" />
+            <div class="btnrow">
+                <button @onclick="SetExpiry" disabled="@(expiry is null)">Set expiry</button>
+                <button @onclick="ClearExpiry">Clear (never)</button>
+            </div>
+        }
+        else if (tab == "Address")
+        {
+            @Field("Street", "streetAddress")
+            @Field("P.O. Box", "postOfficeBox")
+            @Field("City", "l")
+            @Field("State/Province", "st")
+            @Field("Zip/Postal code", "postalCode")
+            @Field("Country/Region", "co")
+            @Field("Country code (ISO2)", "c")
+        }
+        else if (tab == "Telephones")
+        {
+            @Field("Home", "homePhone")
+            @Field("Pager", "pager")
+            @Field("Mobile", "mobile")
+            @Field("Fax", "facsimileTelephoneNumber")
+            @Field("IP phone", "ipPhone")
+            @Field("Notes", "info")
+        }
+        else if (tab == "Organization")
+        {
+            @Field("Title", "title")
+            @Field("Department", "department")
+            @Field("Company", "company")
+            @Field("Manager (DN)", "manager")
+            <div class="hint">Полный DN руководителя, напр. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div>
+        }
+        else if (tab == "Profile")
+        {
+            @Field("Profile path", "profilePath")
+            @Field("Logon script", "scriptPath")
+            @Field("Home folder (path)", "homeDirectory")
+            @Field("Home drive", "homeDrive")
+        }
+
+        <div class="btnrow" style="margin-top:16px">
+            <button class="primary" @onclick="SaveAll">Save attributes</button>
+            <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery] private string? Dn { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private static readonly string[] Tabs = { "General", "Account", "Address", "Telephones", "Organization", "Profile" };
+    private static readonly string[] EditableKeys =
+    {
+        "givenName","sn","initials","displayName","description","physicalDeliveryOfficeName","telephoneNumber","mail","wWWHomePage",
+        "userPrincipalName","streetAddress","postOfficeBox","l","st","postalCode","co","c",
+        "homePhone","pager","mobile","facsimileTelephoneNumber","ipPhone","info",
+        "title","department","company","manager","profilePath","scriptPath","homeDirectory","homeDrive",
+    };
+
+    private Dictionary<string, string?>? model;
+    private string tab = "General";
+    private bool pne; private DateTime? expiry;
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Dn)) { banner = "No user specified."; ok = false; return; }
+        var wanted = EditableKeys.Append("userAccountControl").ToArray();
+        var det = await Dir.GetObjectAsync(Dn, wanted);
+        model = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var k in EditableKeys) model[k] = det?.Attributes.GetValueOrDefault(k);
+        var uac = int.TryParse(det?.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
+        pne = (uac & 0x10000) != 0;
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private RenderFragment Field(string label, string key) => builder =>
+    {
+        builder.OpenElement(0, "label"); builder.AddContent(1, label); builder.CloseElement();
+        builder.OpenElement(2, "input");
+        builder.AddAttribute(3, "type", "text");
+        builder.AddAttribute(4, "value", model!.GetValueOrDefault(key));
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => model![key] = e.Value?.ToString()));
+        builder.CloseElement();
+    };
+
+    private async Task SaveAll()
+    {
+        var attrs = new Dictionary<string, string?>();
+        foreach (var k in EditableKeys)
+        {
+            var val = model!.GetValueOrDefault(k);
+            if (k == "userPrincipalName" && string.IsNullOrEmpty(val)) continue; // не очищать UPN
+            attrs[k] = val;
+        }
+        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs));
+    }
+
+    private async Task TogglePne(ChangeEventArgs e)
+    {
+        pne = (bool)(e.Value ?? false);
+        Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(PasswordNeverExpires: pne)));
+    }
+    private async Task ForceChange() => Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(MustChangePasswordAtNextLogon: true)));
+    private async Task SetExpiry() => Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(AccountExpiresUtc: expiry)));
+    private async Task ClearExpiry() { expiry = null; Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(ClearAccountExpiry: true))); }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Saved." : ("Error: " + r.Message); }
+}

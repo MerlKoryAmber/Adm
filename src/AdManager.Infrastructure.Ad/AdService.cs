@@ -220,6 +220,17 @@ public sealed class AdService : IAdService
             return OperationResult.Ok();
         }, ct);
 
+    public Task<OperationResult> ResetComputerAccountAsync(string computerDn, CancellationToken ct = default)
+        => Do(() =>
+        {
+            using var de = Bind(computerDn);
+            var sam = de.Properties["sAMAccountName"].Value?.ToString() ?? "";
+            var name = sam.TrimEnd('$');
+            // Сброс машинного пароля к значению по умолчанию (имя компьютера в нижнем регистре) — как dsmod/ADManager.
+            de.Invoke("SetPassword", new object[] { name.ToLowerInvariant() });
+            return OperationResult.Ok();
+        }, ct);
+
     // Экранирование запятой/спецсимволов в RDN-значении.
     private static string Escape(string value)
         => value.Replace("\\", "\\\\").Replace(",", "\\,").Replace("+", "\\+")

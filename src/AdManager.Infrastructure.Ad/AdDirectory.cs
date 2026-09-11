@@ -204,6 +204,48 @@ public sealed class AdDirectory : IAdDirectory
             return list.OrderBy(o => o.Dn.Length).ThenBy(o => o.Dn).ToList();
         }, ct);
 
+    public Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default)
+        => Task.Run<IReadOnlyList<AdSearchResult>>(() =>
+        {
+            var t = EscapeFilter(term);
+            using var root = Bind(baseDn);
+            using var s = new DirectorySearcher(root)
+            {
+                Filter = "(&(|(objectCategory=person)(objectClass=group)(objectClass=computer)(objectClass=contact)(objectClass=organizationalUnit))" +
+                         $"(|(cn=*{t}*)(sAMAccountName=*{t}*)(displayName=*{t}*)(mail=*{t}*)))",
+                SearchScope = SearchScope.Subtree,
+                PageSize = 500,
+                SizeLimit = 500,
+            };
+            foreach (var p in new[] { "distinguishedName", "name", "displayName", "sAMAccountName", "objectClass", "userAccountControl" })
+                s.PropertiesToLoad.Add(p);
+
+            var list = new List<AdSearchResult>();
+            using var results = s.FindAll();
+            foreach (SearchResult r in results)
+            {
+                var cls = ClassOf(r);
+                bool? enabled = r.Properties.Contains("userAccountControl") && r.Properties["userAccountControl"].Count > 0
+                    ? (Convert.ToInt32(r.Properties["userAccountControl"][0]) & UF_ACCOUNTDISABLE) == 0
+                    : null;
+                var name = StrOrNull(r, "displayName") ?? Str(r, "name");
+                list.Add(new AdSearchResult(Str(r, "distinguishedName"), name, StrOrNull(r, "sAMAccountName"), cls, enabled));
+            }
+            return list.OrderBy(x => x.ObjectClass).ThenBy(x => x.Name).ToList();
+        }, ct);
+
+    private static string ClassOf(SearchResult r)
+    {
+        if (!r.Properties.Contains("objectClass")) return "object";
+        var classes = r.Properties["objectClass"].Cast<object>().Select(o => o!.ToString()!).ToList();
+        foreach (var c in new[] { "computer", "organizationalUnit", "group", "contact", "user" })
+            if (classes.Contains(c, StringComparer.OrdinalIgnoreCase)) return c;
+        return classes.LastOrDefault() ?? "object";
+    }
+
+    private static string EscapeFilter(string value)
+        => value.Replace("\\", "\\5c").Replace("*", "\\2a").Replace("(", "\\28").Replace(")", "\\29").Replace("\0", "\\00");
+
     private static int OuCount(string dn)
         => dn.Split(',').Count(p => p.Trim().StartsWith("OU=", StringComparison.OrdinalIgnoreCase));
 

@@ -2,6 +2,7 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject UiOptions Ui
+@inject NavigationManager Nav
 
 <PageTitle>User Management — admanager</PageTitle>
 <h1>User Management</h1>
@@ -117,7 +118,10 @@
             <label>Email</label><input type="text" @bind="attrMail" />
             <label>Department</label><input type="text" @bind="attrDept" />
             <label>Title</label><input type="text" @bind="attrTitle" />
-            <div class="btnrow"><button class="primary" @onclick="SaveAttributes">Save attributes</button></div>
+            <div class="btnrow">
+                <button class="primary" @onclick="SaveAttributes">Save quick</button>
+                <button @onclick='() => Nav.NavigateTo($"users/modify?dn={Uri.EscapeDataString(sel!.Dn)}")'>Modify all attributes…</button>
+            </div>
 
             <hr />
             <h3>Rename / Move</h3>

@@ -1,0 +1,94 @@
+@page "/users/bulk"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+
+<PageTitle>Bulk create users — admanager</PageTitle>
+<h1>Bulk create users</h1>
+<p class="subtitle">Paste CSV. Columns: <code>sam,displayName,upn,password,ou,enabled,department,title</code>. Header row optional. Empty OU → default.</p>
+
+<div class="panel" style="max-width:760px">
+    <label>Default OU (when column empty)</label>
+    <select @bind="defaultOu">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+
+    <label>CSV</label>
+    <textarea @bind="csv" rows="10" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:5px;background:var(--primary-dark);color:var(--text);font-family:monospace;font-size:13px"
+              placeholder="j.doe,John Doe,j.doe@merl.loc,P@ssw0rd-1,,true,IT,Engineer"></textarea>
+
+    <div class="btnrow">
+        <button class="primary" @onclick="Run" disabled="@(string.IsNullOrWhiteSpace(csv) || running)">@(running ? "Creating…" : "Create users")</button>
+    </div>
+</div>
+
+@if (log.Count > 0)
+{
+    <div class="panel" style="margin-top:14px">
+        <h3>Results — @okCount ok, @failCount failed</h3>
+        <table>
+            <thead><tr><th>#</th><th>Account</th><th>Result</th></tr></thead>
+            <tbody>
+                @foreach (var (line, ok, msg) in log)
+                {
+                    <tr><td>@line</td><td>@msg</td><td><span class="badge @(ok ? "ok" : "off")">@(ok ? "ok" : "fail")</span></td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private string defaultOu = "", csv = "";
+    private bool running;
+    private int okCount, failCount;
+    private readonly List<(string line, bool ok, string msg)> log = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
+        defaultOu = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : Ui.BaseDn;
+    }
+
+    private async Task Run()
+    {
+        running = true; log.Clear(); okCount = failCount = 0;
+        var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
+        var lines = csv.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var n = 0;
+        foreach (var raw in lines)
+        {
+            n++;
+            var c = raw.Split(',');
+            var sam = Col(c, 0);
+            if (string.IsNullOrWhiteSpace(sam)) continue;
+            if (n == 1 && sam.Equals("sam", StringComparison.OrdinalIgnoreCase)) continue; // header
+
+            var display = Col(c, 1); if (string.IsNullOrWhiteSpace(display)) display = sam;
+            var upn = Col(c, 2); if (string.IsNullOrWhiteSpace(upn)) upn = $"{sam}@{Ui.Domain}";
+            var pwd = Col(c, 3);
+            var ou = Col(c, 4); if (string.IsNullOrWhiteSpace(ou)) ou = defaultOu;
+            var enabled = Col(c, 5) is { Length: > 0 } e && (e.Equals("true", StringComparison.OrdinalIgnoreCase) || e == "1");
+            var dept = Col(c, 6); var title = Col(c, 7);
+
+            var req = new CreateUserRequest(ou, sam, display, upn,
+                InitialPassword: string.IsNullOrEmpty(pwd) ? null : pwd, Enabled: enabled,
+                Attributes: new Dictionary<string, string?> { ["department"] = dept, ["title"] = title });
+
+            var r = await Mgmt.CreateUserAsync(actor, req);
+            if (r.Success) okCount++; else failCount++;
+            log.Add((n.ToString(), r.Success, r.Success ? sam : $"{sam}: {r.Message}"));
+        }
+        running = false;
+    }
+
+    private static string Col(string[] c, int i) => i < c.Length ? c[i].Trim() : "";
+    private static string Indent(int d) => new string(' ', d * 3);
+}

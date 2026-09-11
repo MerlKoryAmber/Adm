@@ -67,6 +67,12 @@ public sealed class AdManagementService
     public Task<OperationResult> DeleteObjectAsync(TechnicianContext actor, string dn, CancellationToken ct = default)
         => Run(actor, Permission.DeleteObject, dn, "attempt: delete", () => _ad.DeleteObjectAsync(dn, ct), ct);
 
+    public Task<OperationResult> ResetComputerAccountAsync(TechnicianContext actor, string dn, CancellationToken ct = default)
+        => Run(actor, Permission.ManageComputer, dn, "attempt: reset computer account", () => _ad.ResetComputerAccountAsync(dn, ct), ct);
+
+    public Task<OperationResult> SetAttributesAsync(TechnicianContext actor, string dn, IReadOnlyDictionary<string, string?> attributes, string targetLabel, CancellationToken ct = default)
+        => Run(actor, Permission.ModifyAttributes, dn, $"attempt: modify {targetLabel}", () => _ad.SetAttributesAsync(dn, attributes, ct), ct);
+
     private async Task<OperationResult> Run(TechnicianContext actor, Permission perm, string targetDn, string attemptMsg, Func<Task<OperationResult>> op, CancellationToken ct)
     {
         var decision = await _rbac.AuthorizeAsync(actor, perm, targetDn, ct);

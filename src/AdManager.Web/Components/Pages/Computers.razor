@@ -62,8 +62,16 @@
             <div class="btnrow">
                 @if (sel.Enabled) { <button @onclick="() => SetEnabled(false)">Disable</button> }
                 else { <button class="primary" @onclick="() => SetEnabled(true)">Enable</button> }
+                <button @onclick="ResetAccount">Reset account</button>
             </div>
 
+            <h3 style="margin-top:12px">Attributes</h3>
+            <label>Description</label><input type="text" @bind="cDesc" />
+            <label>Location</label><input type="text" @bind="cLocation" />
+            <label>Managed by (DN)</label><input type="text" @bind="cManagedBy" />
+            <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
+
+            <hr />
             <label>Rename (new CN)</label>
             <input type="text" @bind="renameTo" />
             <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
@@ -97,6 +105,7 @@
     private AdComputerSummary? sel;
     private string ouDn = "";
     private string newName = "", renameTo = "", moveTo = "";
+    private string cDesc = "", cLocation = "", cManagedBy = "";
     private string? banner; private bool ok; private bool confirmDelete;
 
     protected override async Task OnInitializedAsync()
@@ -119,7 +128,22 @@
         return CurrentUser.From(p);
     }
 
-    private void Select(AdComputerSummary c) { sel = c; banner = null; confirmDelete = false; renameTo = ""; moveTo = ouDn; }
+    private async Task Select(AdComputerSummary c)
+    {
+        sel = c; banner = null; confirmDelete = false; renameTo = ""; moveTo = ouDn;
+        var det = await Dir.GetObjectAsync(c.Dn, new[] { "description", "location", "managedBy" });
+        cDesc = det?.Attributes.GetValueOrDefault("description") ?? "";
+        cLocation = det?.Attributes.GetValueOrDefault("location") ?? "";
+        cManagedBy = det?.Attributes.GetValueOrDefault("managedBy") ?? "";
+    }
+
+    private async Task SaveAttrs()
+    {
+        var attrs = new Dictionary<string, string?> { ["description"] = cDesc, ["location"] = cLocation, ["managedBy"] = cManagedBy };
+        Show(await Mgmt.SetAttributesAsync(await Actor(), sel!.Dn, attrs));
+    }
+
+    private async Task ResetAccount() { Show(await Mgmt.ResetComputerAccountAsync(await Actor(), sel!.Dn)); }
 
     private async Task SetEnabled(bool en) { Show(await Mgmt.SetEnabledAsync(await Actor(), sel!.Dn, en)); await Load(); }
     private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }

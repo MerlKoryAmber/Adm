@@ -98,6 +98,14 @@
             }
 
             <hr />
+            <h3>Attributes</h3>
+            <label>Description</label><input type="text" @bind="gDesc" />
+            <label>Email</label><input type="text" @bind="gMail" />
+            <label>Managed by (DN)</label><input type="text" @bind="gManagedBy" />
+            <label>Notes</label><input type="text" @bind="gInfo" />
+            <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
+
+            <hr />
             <label>Rename (new CN)</label><input type="text" @bind="renameTo" />
             <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
             <label>Move to OU</label>
@@ -131,6 +139,7 @@
     private AdGroupSummary? sel;
     private string ouDn = "", addDn = "", renameTo = "", moveTo = "";
     private string ngSam = "", ngName = "", ngScope = "Global", ngKind = "Security";
+    private string gDesc = "", gMail = "", gManagedBy = "", gInfo = "";
     private string? banner; private bool ok; private bool confirmDelete;
 
     protected override async Task OnInitializedAsync()
@@ -157,6 +166,17 @@
     {
         sel = g; banner = null; addDn = ""; renameTo = ""; moveTo = ouDn; confirmDelete = false;
         await LoadMembers();
+        var det = await Dir.GetObjectAsync(g.Dn, new[] { "description", "mail", "managedBy", "info" });
+        gDesc = det?.Attributes.GetValueOrDefault("description") ?? "";
+        gMail = det?.Attributes.GetValueOrDefault("mail") ?? "";
+        gManagedBy = det?.Attributes.GetValueOrDefault("managedBy") ?? "";
+        gInfo = det?.Attributes.GetValueOrDefault("info") ?? "";
+    }
+
+    private async Task SaveAttrs()
+    {
+        var attrs = new Dictionary<string, string?> { ["description"] = gDesc, ["mail"] = gMail, ["managedBy"] = gManagedBy, ["info"] = gInfo };
+        Show(await Mgmt.SetAttributesAsync(await Actor(), sel!.Dn, attrs));
     }
 
     private async Task LoadMembers() => members = (await Dir.ListGroupMembersAsync(sel!.Dn)).ToList();

@@ -22,6 +22,8 @@ public sealed record AdComputerSummary(string Dn, string SamAccountName, string 
 
 public sealed record AdContactSummary(string Dn, string Name, string? Mail);
 
+public sealed record AdSearchResult(string Dn, string Name, string? SamAccountName, string ObjectClass, bool? Enabled);
+
 public sealed record AdObjectDetails(string Dn, IReadOnlyDictionary<string, string?> Attributes);
 
 /// <summary>Чтение каталога AD (для UI-обзора). Read-only, под operational identity.</summary>
@@ -37,4 +39,7 @@ public interface IAdDirectory
 
     /// <summary>Все OU поддерева (для выбора OU в формах).</summary>
     Task<IReadOnlyList<AdOuNode>> ListAllOusAsync(string baseDn, CancellationToken ct = default);
+
+    /// <summary>Поиск объектов по подстроке (cn/sAMAccountName/displayName/mail) в поддереве.</summary>
+    Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default);
 }

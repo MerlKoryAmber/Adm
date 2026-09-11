@@ -91,6 +91,7 @@ public interface IAdService
     Task<OperationResult> CreateComputerAsync(CreateComputerRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateContactAsync(CreateContactRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateOuAsync(CreateOuRequest request, CancellationToken ct = default);
+    Task<OperationResult> ResetComputerAccountAsync(string computerDn, CancellationToken ct = default);
 }
 
 /// <summary>Операции Exchange 2019 через remote PowerShell.</summary>

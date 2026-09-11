@@ -109,3 +109,8 @@ button.danger:hover { background: var(--err); color: #0c121c; }
 hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 code { background: var(--primary-dark); color: var(--accent); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 a { color: var(--link); }
+
+.tabbar { display: flex; gap: 3px; margin: 10px 0 0; flex-wrap: wrap; }
+.tabbtn { background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; padding: 7px 14px; color: var(--muted); font-size: 13.5px; }
+.tabbtn:hover { color: var(--text); }
+.tabbtn.on { background: var(--surface-hover); color: var(--accent); border-color: var(--accent); font-weight: 600; }
