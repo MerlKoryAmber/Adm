@@ -4,8 +4,8 @@
 @inject UiOptions Ui
 @inject NavigationManager Nav
 
-<PageTitle>User Management — admanager</PageTitle>
-<h1>User Management</h1>
+<PageTitle>Users — admanager</PageTitle>
+<h1>Users</h1>
 
 @if (banner is not null)
 {
@@ -13,14 +13,9 @@
 }
 
 <div class="toolbar">
-    <select @bind="ouDn" @bind:after="Load" style="max-width:320px">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
     <input class="searchbox" type="text" placeholder="Search name / account / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <label class="chkinline"><input type="checkbox" @bind="onlyLocked" @bind:after="() => page = 0" /> Locked only</label>
+    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("users/create")'>+ Create</button>
     <button @onclick='() => Nav.NavigateTo("users/bulk")'>Bulk CSV</button>
@@ -112,7 +107,8 @@ else
     private List<AdOuNode>? ous;
     private List<AdUserSummary>? users;
     private readonly HashSet<string> selected = new();
-    private string ouDn = "", search = "", bulkPwd = "", bulkMoveTo = "";
+    private string search = "", bulkPwd = "", bulkMoveTo = "";
+    private bool onlyLocked, onlyDisabled;
     private int page;
     private string? banner; private bool ok; private bool confirmBulkDelete;
 
@@ -120,26 +116,31 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
-        ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); // для bulk «move to…»
         await Load();
     }
 
     private async Task Load()
     {
-        try { users = (await Dir.ListUsersAsync(ouDn, subtree: true)).ToList(); page = 0; }
+        try { users = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList(); page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
 
     private List<AdUserSummary> Filtered()
     {
-        if (string.IsNullOrWhiteSpace(search)) return users!;
-        var t = search.Trim();
-        return users!.Where(u =>
-            (u.DisplayName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (u.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (u.Upn?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (u.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+        var q = users!.AsEnumerable();
+        if (onlyLocked) q = q.Where(u => u.LockedOut);
+        if (onlyDisabled) q = q.Where(u => !u.Enabled);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(u =>
+                (u.DisplayName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.Upn?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
     }
 
     private async Task<TechnicianContext> Actor()

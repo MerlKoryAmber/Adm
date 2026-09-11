@@ -12,39 +12,87 @@
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="panel" style="max-width:540px">
-    <label>Target OU</label>
-    <select @bind="ouDn">
+<div class="toolbar" style="max-width:640px">
+    <label style="margin:0">Target OU</label>
+    <select @bind="ouDn" class="grow">
         <option value="@Ui.BaseDn">(domain root)</option>
         @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
         {
             <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
         }
     </select>
+</div>
 
-    <label>SAM account name</label>
-    <input type="text" @bind="sam" placeholder="j.doe" />
-    <div class="hint">Logon name (pre-Windows 2000). Required.</div>
+<div class="tabbar">
+    @foreach (var t in Tabs)
+    {
+        <button class="tabbtn @(tab == t ? "on" : null)" @onclick="() => tab = t">@t</button>
+    }
+</div>
 
-    <label>Display name</label>
-    <input type="text" @bind="display" placeholder="John Doe" />
+<div class="panel" style="max-width:640px">
+    @if (tab == "General")
+    {
+        @Field("First name", "givenName")
+        @Field("Initials", "initials")
+        @Field("Last name", "sn")
+        @Field("Display name", "displayName")
+        <div class="hint">CN объекта. Если пусто — берётся sAMAccountName.</div>
+        @Field("Description", "description")
+        @Field("Office", "physicalDeliveryOfficeName")
+        @Field("Telephone", "telephoneNumber")
+        @Field("Email", "mail")
+        @Field("Web page", "wWWHomePage")
+    }
+    else if (tab == "Account")
+    {
+        <label>SAM account name *</label>
+        <input type="text" @bind="sam" placeholder="j.doe" />
+        <label>User principal name</label>
+        <input type="text" @bind="upnField" placeholder="@Upn" />
+        <div class="hint">Если пусто — <code>@Upn</code>.</div>
+        <label>Initial password</label>
+        <input type="password" @bind="password" />
+        <div class="hint">Нужен для включённой учётки; по политике домена.</div>
+        <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
+        <div class="checkbox"><input type="checkbox" id="mc" @bind="mustChange" /><label for="mc">Must change password at next logon</label></div>
+    }
+    else if (tab == "Address")
+    {
+        @Field("Street", "streetAddress")
+        @Field("P.O. Box", "postOfficeBox")
+        @Field("City", "l")
+        @Field("State/Province", "st")
+        @Field("Zip/Postal code", "postalCode")
+        @Field("Country/Region", "co")
+        @Field("Country code (ISO2)", "c")
+    }
+    else if (tab == "Telephones")
+    {
+        @Field("Home", "homePhone")
+        @Field("Pager", "pager")
+        @Field("Mobile", "mobile")
+        @Field("Fax", "facsimileTelephoneNumber")
+        @Field("IP phone", "ipPhone")
+        @Field("Notes", "info")
+    }
+    else if (tab == "Organization")
+    {
+        @Field("Title", "title")
+        @Field("Department", "department")
+        @Field("Company", "company")
+        @Field("Manager (DN)", "manager")
+    }
+    else if (tab == "Profile")
+    {
+        @Field("Profile path", "profilePath")
+        @Field("Logon script", "scriptPath")
+        @Field("Home folder (path)", "homeDirectory")
+        @Field("Home drive", "homeDrive")
+    }
 
-    <label>User principal name</label>
-    <input type="text" @bind="upn" placeholder="@SamPreview" />
-    <div class="hint">Defaults to <code>@SamPreview</code> if left blank.</div>
-
-    <label>Initial password</label>
-    <input type="password" @bind="password" />
-    <div class="hint">Must meet the domain password policy. Required to enable the account.</div>
-
-    <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
-    <div class="checkbox"><input type="checkbox" id="mc" @bind="mustChange" /><label for="mc">Must change password at next logon</label></div>
-
-    <label>Department</label><input type="text" @bind="dept" />
-    <label>Title</label><input type="text" @bind="title" />
-
-    <div class="btnrow">
-        <button class="primary" @onclick="Create" disabled="@(!CanCreate)">Create user</button>
+    <div class="btnrow" style="margin-top:16px">
+        <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(sam)">Create user</button>
         <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
     </div>
 </div>
@@ -52,14 +100,23 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    private static readonly string[] Tabs = { "General", "Account", "Address", "Telephones", "Organization", "Profile" };
+    private static readonly string[] AttrKeys =
+    {
+        "givenName","sn","initials","displayName","description","physicalDeliveryOfficeName","telephoneNumber","mail","wWWHomePage",
+        "userPrincipalName","streetAddress","postOfficeBox","l","st","postalCode","co","c",
+        "homePhone","pager","mobile","facsimileTelephoneNumber","ipPhone","info",
+        "title","department","company","manager","profilePath","scriptPath","homeDirectory","homeDrive",
+    };
+
     private List<AdOuNode>? ous;
-    private string ouDn = "";
-    private string sam = "", display = "", upn = "", password = "", dept = "", title = "";
+    private readonly Dictionary<string, string?> model = new(StringComparer.OrdinalIgnoreCase);
+    private string tab = "General";
+    private string ouDn = "", sam = "", password = "", upnField = "";
     private bool enabled = true, mustChange;
     private string? banner; private bool ok;
 
-    private string SamPreview => (string.IsNullOrWhiteSpace(sam) ? "user" : sam) + "@" + Ui.Domain;
-    private bool CanCreate => !string.IsNullOrWhiteSpace(sam) && !string.IsNullOrWhiteSpace(display);
+    private string Upn => (string.IsNullOrWhiteSpace(sam) ? "user" : sam) + "@" + Ui.Domain;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,16 +124,33 @@
         ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
     }
 
+    private RenderFragment Field(string label, string key) => builder =>
+    {
+        builder.OpenElement(0, "label"); builder.AddContent(1, label); builder.CloseElement();
+        builder.OpenElement(2, "input");
+        builder.AddAttribute(3, "type", "text");
+        builder.AddAttribute(4, "value", model.GetValueOrDefault(key));
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => model[key] = e.Value?.ToString()));
+        builder.CloseElement();
+    };
+
     private async Task Create()
     {
-        var principal = AuthState is null ? null : (await AuthState).User;
-        var actor = CurrentUser.From(principal);
-        var req = new CreateUserRequest(
-            ouDn, sam.Trim(), display.Trim(),
-            string.IsNullOrWhiteSpace(upn) ? SamPreview : upn.Trim(),
-            InitialPassword: string.IsNullOrEmpty(password) ? null : password,
-            Enabled: enabled,
-            Attributes: new Dictionary<string, string?> { ["department"] = dept, ["title"] = title });
+        var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
+        var display = model.GetValueOrDefault("displayName");
+        if (string.IsNullOrWhiteSpace(display)) display = sam;
+        var upn = string.IsNullOrWhiteSpace(upnField) ? Upn : upnField.Trim();
+
+        var attrs = new Dictionary<string, string?>();
+        foreach (var k in AttrKeys)
+        {
+            if (k is "displayName" or "userPrincipalName") continue; // идут явными параметрами
+            var v = model.GetValueOrDefault(k);
+            if (!string.IsNullOrEmpty(v)) attrs[k] = v;
+        }
+
+        var req = new CreateUserRequest(ouDn, sam.Trim(), display!.Trim(), upn!.Trim(),
+            InitialPassword: string.IsNullOrEmpty(password) ? null : password, Enabled: enabled, Attributes: attrs);
 
         var r = await Mgmt.CreateUserAsync(actor, req);
         ok = r.Success;
@@ -87,7 +161,7 @@
             var dn = $"CN={display.Trim()},{ouDn}";
             await Mgmt.SetAccountOptionsAsync(actor, dn, new AccountOptions(MustChangePasswordAtNextLogon: true));
         }
-        if (r.Success) { sam = display = upn = password = dept = title = ""; }
+        if (r.Success) { sam = password = ""; model.Clear(); }
     }
 
     private static string Indent(int d) => new string(' ', d * 3);
