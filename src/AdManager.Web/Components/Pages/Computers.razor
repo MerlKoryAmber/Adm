@@ -6,58 +6,107 @@
 <PageTitle>Computer Management — admanager</PageTitle>
 <h1>Computer Management</h1>
 
-<div class="panelhead" style="max-width:520px">
-    <div style="flex:1">
-        <label>Organizational Unit</label>
-        <select @bind="ouDn" @bind:after="Load">
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="toolbar">
+    <input class="searchbox" type="text" placeholder="Search name / OS…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
+    <label class="chkinline">
+        OU:
+        <select @bind="ouDn" @bind:after="Load" style="max-width:220px">
             <option value="@Ui.BaseDn">(domain root)</option>
             @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
             {
                 <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
             }
         </select>
-    </div>
+    </label>
+    <span class="grow"></span>
+    <button @onclick="Load">Refresh</button>
 </div>
 
-@if (banner is not null)
+@if (selected.Count > 0)
 {
-    <div class="banner @(ok ? "ok" : "err")">@banner</div>
-}
-
-<div class="layout2">
-    <div class="panel">
-        <div class="panelhead"><h3>Computers</h3><button @onclick="Load">Refresh</button></div>
-        @if (items is null) { <p>Loading…</p> }
+    <div class="bulkbar">
+        <span class="count">@selected.Count selected</span>
+        <button @onclick="() => BulkEnabled(true)">Enable</button>
+        <button @onclick="() => BulkEnabled(false)">Disable</button>
+        <button @onclick="BulkReset">Reset account</button>
+        <select @bind="bulkMoveTo" style="max-width:180px">
+            <option value="">move to…</option>
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <button @onclick="BulkMove" disabled="@string.IsNullOrEmpty(bulkMoveTo)">Move</button>
+        @if (!confirmBulkDelete) { <button class="danger" @onclick="() => confirmBulkDelete = true">Delete…</button> }
         else
         {
+            <button class="danger" @onclick="BulkDelete">Confirm delete @selected.Count</button>
+            <button @onclick="() => confirmBulkDelete = false">Cancel</button>
+        }
+        <button class="linkbtn" @onclick="ClearSel">clear</button>
+    </div>
+}
+
+@if (items is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    var filtered = Filtered();
+    var total = filtered.Count;
+    var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+    if (page >= pages) page = pages - 1;
+    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
             <table>
-                <thead><tr><th>Name</th><th>OS</th><th>Status</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th class="chk"><input type="checkbox" checked="@AllOnPageSelected(pageItems)" @onchange="e => TogglePage(pageItems, e)" /></th>
+                        <th>Name</th><th>OS</th><th>Status</th><th></th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @foreach (var c in items)
+                    @foreach (var c in pageItems)
                     {
-                        <tr class="selectable @(sel?.Dn == c.Dn ? "selected" : null)" @onclick="() => Select(c)">
-                            <td>@c.Name</td><td>@(c.OperatingSystem ?? "—")</td>
+                        <tr class="@(sel?.Dn == c.Dn ? "selected" : null)">
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(c.Dn)" @onchange="e => ToggleOne(c.Dn, e)" /></td>
+                            <td>@c.Name</td>
+                            <td>@(c.OperatingSystem ?? "—")</td>
                             <td><span class="badge @(c.Enabled ? "ok" : "off")">@(c.Enabled ? "Enabled" : "Disabled")</span></td>
+                            <td><button class="linkbtn" @onclick="() => Select(c)">Manage ▸</button></td>
                         </tr>
                     }
                 </tbody>
             </table>
-            <p class="hint">@items.Count computer(s)</p>
-        }
-
-        <hr />
-        <h3>Create computer</h3>
-        <label>Name</label>
-        <input type="text" @bind="newName" placeholder="WKS-01" />
-        <div class="hint">Created in the selected OU. sAMAccountName becomes NAME$.</div>
-        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button></div>
+        </div>
     </div>
 
+    <div class="pager">
+        <span>@total computer(s)</span>
+        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <span>Page @(page + 1) / @pages</span>
+        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+    </div>
+}
+
+<div class="layout2" style="margin-top:16px">
     <div class="panel">
-        @if (sel is null) { <p class="muted">Select a computer to manage.</p> }
+        @if (sel is null) { <p class="muted">Select a computer (Manage ▸) to manage.</p> }
         else
         {
-            <h3>@sel.Name</h3>
+            <div class="panelhead"><h3>@sel.Name</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
             <p class="hint">@sel.Dn</p>
             <div class="btnrow">
                 @if (sel.Enabled) { <button @onclick="() => SetEnabled(false)">Disable</button> }
@@ -95,18 +144,30 @@
             }
         }
     </div>
+
+    <div class="panel">
+        <h3>Create computer</h3>
+        <label>Name</label>
+        <input type="text" @bind="newName" placeholder="WKS-01" />
+        <div class="hint">Created in the selected OU. sAMAccountName becomes NAME$.</div>
+        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button></div>
+    </div>
 </div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdComputerSummary>? items;
     private AdComputerSummary? sel;
-    private string ouDn = "";
-    private string newName = "", renameTo = "", moveTo = "";
+    private readonly HashSet<string> selected = new();
+    private string search = "", ouDn = "";
+    private bool onlyDisabled;
+    private string newName = "", renameTo = "", moveTo = "", bulkMoveTo = "";
     private string cDesc = "", cLocation = "", cManagedBy = "";
-    private string? banner; private bool ok; private bool confirmDelete;
+    private int page;
+    private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -118,8 +179,65 @@
 
     private async Task Load()
     {
-        try { items = (await Dir.ListComputersAsync(ouDn, subtree: true)).ToList(); sel = null; }
+        try { items = (await Dir.ListComputersAsync(ouDn, subtree: true)).ToList(); sel = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private List<AdComputerSummary> Filtered()
+    {
+        var q = items!.AsEnumerable();
+        if (onlyDisabled) q = q.Where(c => !c.Enabled);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(c =>
+                (c.Name?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.OperatingSystem?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
+    }
+
+    private bool AllOnPageSelected(List<AdComputerSummary> pageItems) => pageItems.Count > 0 && pageItems.All(c => selected.Contains(c.Dn));
+    private void TogglePage(List<AdComputerSummary> pageItems, ChangeEventArgs e)
+    {
+        var on = (bool)(e.Value ?? false);
+        foreach (var c in pageItems) { if (on) selected.Add(c.Dn); else selected.Remove(c.Dn); }
+    }
+    private void ToggleOne(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) selected.Add(dn); else selected.Remove(dn); }
+    private void ClearSel() { selected.Clear(); confirmBulkDelete = false; }
+
+    private async Task BulkEnabled(bool en)
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.SetEnabledAsync(actor, dn, en); if (r.Success) okc++; else fail++; }
+        Finish(en ? "Enable" : "Disable", okc, fail);
+    }
+
+    private async Task BulkReset()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.ResetComputerAccountAsync(actor, dn); if (r.Success) okc++; else fail++; }
+        Finish("Reset account", okc, fail);
+    }
+
+    private async Task BulkMove()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.MoveAsync(actor, dn, bulkMoveTo); if (r.Success) okc++; else fail++; }
+        bulkMoveTo = ""; Finish("Move", okc, fail);
+    }
+
+    private async Task BulkDelete()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.DeleteObjectAsync(actor, dn); if (r.Success) okc++; else fail++; }
+        Finish("Delete", okc, fail);
+    }
+
+    private async Task Finish(string op, int okc, int fail)
+    {
+        ok = fail == 0; banner = $"{op}: {okc} ok, {fail} failed.";
+        selected.Clear(); confirmBulkDelete = false; await Load();
     }
 
     private async Task<TechnicianContext> Actor()
@@ -156,5 +274,5 @@
     }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
-    private static string Indent(int d) => new string(' ', d * 3);
+    private static string Indent(int d) => new string(' ', d * 3);
 }

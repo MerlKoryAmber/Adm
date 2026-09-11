@@ -12,40 +12,88 @@
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="layout2">
-    <div class="panel">
-        <h3>Mailboxes</h3>
-        <label>Organizational Unit</label>
-        <select @bind="ouDn" @bind:after="LoadUsers">
+<div class="toolbar">
+    <input class="searchbox" type="text" placeholder="Search name / account…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <label class="chkinline">
+        OU:
+        <select @bind="ouDn" @bind:after="LoadUsers" style="max-width:220px">
             <option value="@Ui.BaseDn">(domain root)</option>
             @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
             {
                 <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
             }
         </select>
+    </label>
+    <span class="grow"></span>
+    <button @onclick="LoadUsers">Refresh</button>
+</div>
 
-        @if (users is null) { <p>Loading…</p> }
-        else
-        {
-            <table style="margin-top:8px">
-                <thead><tr><th>Display name</th><th>Account</th></tr></thead>
+@if (selected.Count > 0)
+{
+    <div class="bulkbar">
+        <span class="count">@selected.Count selected</span>
+        <button @onclick="BulkEnable">Enable mailbox</button>
+        <button class="danger" @onclick="BulkDisable">Disable mailbox</button>
+        <button class="linkbtn" @onclick="ClearSel">clear</button>
+    </div>
+}
+
+@if (users is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    var filtered = Filtered();
+    var total = filtered.Count;
+    var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+    if (page >= pages) page = pages - 1;
+    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="chk"><input type="checkbox" checked="@AllOnPageSelected(pageItems)" @onchange="e => TogglePage(pageItems, e)" /></th>
+                        <th>Display name</th><th>Account</th><th></th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @foreach (var u in users)
+                    @foreach (var u in pageItems)
                     {
-                        <tr class="selectable @(sel?.Dn == u.Dn ? "selected" : null)" @onclick="() => sel = u">
-                            <td>@u.DisplayName</td><td>@u.SamAccountName</td>
+                        <tr class="@(sel?.Dn == u.Dn ? "selected" : null)">
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(u.Dn)" @onchange="e => ToggleOne(u.Dn, e)" /></td>
+                            <td>@u.DisplayName</td>
+                            <td>@u.SamAccountName</td>
+                            <td><button class="linkbtn" @onclick="() => Select(u)">Mailbox ▸</button></td>
                         </tr>
                     }
                 </tbody>
             </table>
-        }
+        </div>
+    </div>
 
-        @if (sel is not null)
+    <div class="pager">
+        <span>@total user(s)</span>
+        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <span>Page @(page + 1) / @pages</span>
+        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+    </div>
+}
+
+<div class="layout2" style="margin-top:16px">
+    <div class="panel">
+        @if (sel is null) { <p class="muted">Select a user (Mailbox ▸) to manage its mailbox.</p> }
+        else
         {
-            <hr />
-            <h3>@sel.DisplayName</h3>
+            <div class="panelhead"><h3>@sel.DisplayName</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
+            <p class="hint">@sel.Dn</p>
             <label>Alias (optional)</label>
             <input type="text" @bind="alias" placeholder="j.doe" />
+            <div class="hint">Mailbox alias; leave empty to keep the default.</div>
             <div class="btnrow">
                 <button class="primary" @onclick="EnableMailbox">Enable mailbox</button>
                 <button class="danger" @onclick="DisableMailbox">Disable mailbox</button>
@@ -92,12 +140,15 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdUserSummary>? users;
     private AdUserSummary? sel;
-    private string ouDn = "", alias = "", warnMb = "", sendMb = "";
+    private readonly HashSet<string> selected = new();
+    private string search = "", ouDn = "", alias = "", warnMb = "", sendMb = "";
     private bool hidden;
     private string dgName = "", dgOu = "", dgIdentity = "", dgMember = "";
+    private int page;
     private string? banner; private bool ok;
 
     protected override async Task OnInitializedAsync()
@@ -110,8 +161,46 @@
 
     private async Task LoadUsers()
     {
-        try { users = (await Dir.ListUsersAsync(ouDn, subtree: true)).ToList(); }
+        try { users = (await Dir.ListUsersAsync(ouDn, subtree: true)).ToList(); sel = null; selected.Clear(); page = 0; }
         catch (Exception ex) { Fail(ex.Message); }
+    }
+
+    private List<AdUserSummary> Filtered()
+    {
+        var q = users!.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(u =>
+                (u.DisplayName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (u.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
+    }
+
+    private bool AllOnPageSelected(List<AdUserSummary> pageItems) => pageItems.Count > 0 && pageItems.All(u => selected.Contains(u.Dn));
+    private void TogglePage(List<AdUserSummary> pageItems, ChangeEventArgs e)
+    {
+        var on = (bool)(e.Value ?? false);
+        foreach (var u in pageItems) { if (on) selected.Add(u.Dn); else selected.Remove(u.Dn); }
+    }
+    private void ToggleOne(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) selected.Add(dn); else selected.Remove(dn); }
+    private void ClearSel() => selected.Clear();
+
+    private void Select(AdUserSummary u) { sel = u; banner = null; }
+
+    private async Task BulkEnable()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Ex.EnableMailboxAsync(actor, dn, null); if (r.Success) okc++; else fail++; }
+        ok = fail == 0; banner = $"Enable mailbox: {okc} ok, {fail} failed."; selected.Clear();
+    }
+
+    private async Task BulkDisable()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Ex.DisableMailboxAsync(actor, dn); if (r.Success) okc++; else fail++; }
+        ok = fail == 0; banner = $"Disable mailbox: {okc} ok, {fail} failed."; selected.Clear();
     }
 
     private async Task<TechnicianContext> Actor()

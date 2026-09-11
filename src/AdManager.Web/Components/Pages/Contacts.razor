@@ -6,50 +6,108 @@
 <PageTitle>Contact Management — admanager</PageTitle>
 <h1>Contact Management</h1>
 
-<div style="max-width:520px">
-    <label>Organizational Unit</label>
-    <select @bind="ouDn" @bind:after="Load">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
-</div>
-
 @if (banner is not null)
 {
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="layout2">
-    <div class="panel">
-        <div class="panelhead"><h3>Contacts</h3><button @onclick="Load">Refresh</button></div>
-        @if (items is null) { <p>Loading…</p> }
-        else if (items.Count == 0) { <p class="muted">No contacts.</p> }
+<div class="toolbar">
+    <input class="searchbox" type="text" placeholder="Search name / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <label class="chkinline">
+        OU:
+        <select @bind="ouDn" @bind:after="Load" style="max-width:220px">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+    </label>
+    <span class="grow"></span>
+    <button @onclick="Load">Refresh</button>
+</div>
+
+@if (selected.Count > 0)
+{
+    <div class="bulkbar">
+        <span class="count">@selected.Count selected</span>
+        @if (!confirmBulkDelete) { <button class="danger" @onclick="() => confirmBulkDelete = true">Delete…</button> }
         else
         {
+            <button class="danger" @onclick="BulkDelete">Confirm delete @selected.Count</button>
+            <button @onclick="() => confirmBulkDelete = false">Cancel</button>
+        }
+        <button class="linkbtn" @onclick="ClearSel">clear</button>
+    </div>
+}
+
+@if (items is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    var filtered = Filtered();
+    var total = filtered.Count;
+    var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+    if (page >= pages) page = pages - 1;
+    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
             <table>
-                <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th class="chk"><input type="checkbox" checked="@AllOnPageSelected(pageItems)" @onchange="e => TogglePage(pageItems, e)" /></th>
+                        <th>Name</th><th>Email</th><th></th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @foreach (var c in items)
+                    @foreach (var c in pageItems)
                     {
-                        <tr><td>@c.Name</td><td>@(c.Mail ?? "—")</td>
-                            <td><button class="danger" @onclick="() => Delete(c.Dn)">Delete</button></td></tr>
+                        <tr>
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(c.Dn)" @onchange="e => ToggleOne(c.Dn, e)" /></td>
+                            <td>@c.Name</td>
+                            <td>@(c.Mail ?? "—")</td>
+                            <td>
+                                @if (confirmDel == c.Dn)
+                                {
+                                    <span class="rowactions">
+                                        <button class="danger" @onclick="() => Delete(c.Dn)">Yes, delete</button>
+                                        <button class="linkbtn" @onclick="() => confirmDel = null">cancel</button>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <button class="linkbtn" @onclick="() => confirmDel = c.Dn">Delete</button>
+                                }
+                            </td>
+                        </tr>
                     }
                 </tbody>
             </table>
-            <p class="hint">@items.Count contact(s)</p>
-        }
+        </div>
     </div>
 
+    <div class="pager">
+        <span>@total contact(s)</span>
+        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <span>Page @(page + 1) / @pages</span>
+        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+    </div>
+}
+
+<div class="layout2" style="margin-top:16px">
     <div class="panel">
         <h3>Create contact</h3>
         <label>Display name</label>
         <input type="text" @bind="name" placeholder="John Vendor" />
+        <div class="hint">Shown as the contact CN in the selected OU.</div>
         <label>Email</label>
         <input type="text" @bind="mail" placeholder="john@vendor.com" />
-        <div class="hint">Created in the selected OU.</div>
+        <div class="hint">External SMTP address for the contact.</div>
         <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(name)">Create contact</button></div>
     </div>
 </div>
@@ -57,10 +115,14 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdContactSummary>? items;
-    private string ouDn = "", name = "", mail = "";
-    private string? banner; private bool ok;
+    private readonly HashSet<string> selected = new();
+    private string search = "", ouDn = "", name = "", mail = "";
+    private int page;
+    private string? confirmDel;
+    private string? banner; private bool ok; private bool confirmBulkDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,8 +133,37 @@
 
     private async Task Load()
     {
-        try { items = (await Dir.ListContactsAsync(ouDn, subtree: true)).ToList(); }
+        try { items = (await Dir.ListContactsAsync(ouDn, subtree: true)).ToList(); selected.Clear(); confirmBulkDelete = false; confirmDel = null; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private List<AdContactSummary> Filtered()
+    {
+        var q = items!.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(c =>
+                (c.Name?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
+    }
+
+    private bool AllOnPageSelected(List<AdContactSummary> pageItems) => pageItems.Count > 0 && pageItems.All(c => selected.Contains(c.Dn));
+    private void TogglePage(List<AdContactSummary> pageItems, ChangeEventArgs e)
+    {
+        var on = (bool)(e.Value ?? false);
+        foreach (var c in pageItems) { if (on) selected.Add(c.Dn); else selected.Remove(c.Dn); }
+    }
+    private void ToggleOne(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) selected.Add(dn); else selected.Remove(dn); }
+    private void ClearSel() { selected.Clear(); confirmBulkDelete = false; }
+
+    private async Task BulkDelete()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.DeleteObjectAsync(actor, dn); if (r.Success) okc++; else fail++; }
+        ok = fail == 0; banner = $"Delete: {okc} ok, {fail} failed."; selected.Clear(); confirmBulkDelete = false; await Load();
     }
 
     private async Task<TechnicianContext> Actor()
@@ -88,7 +179,7 @@
         name = ""; mail = ""; await Load();
     }
 
-    private async Task Delete(string dn) { Show(await Mgmt.DeleteObjectAsync(await Actor(), dn)); await Load(); }
+    private async Task Delete(string dn) { Show(await Mgmt.DeleteObjectAsync(await Actor(), dn)); confirmDel = null; await Load(); }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);

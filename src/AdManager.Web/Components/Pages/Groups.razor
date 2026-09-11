@@ -6,66 +6,102 @@
 <PageTitle>Group Management — admanager</PageTitle>
 <h1>Group Management</h1>
 
-<div style="max-width:520px">
-    <label>Organizational Unit</label>
-    <select @bind="ouDn" @bind:after="Load">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
-</div>
-
 @if (banner is not null)
 {
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="layout2">
-    <div class="panel">
-        <div class="panelhead"><h3>Groups</h3><button @onclick="Load">Refresh</button></div>
-        @if (groups is null) { <p>Loading…</p> }
+<div class="toolbar">
+    <input class="searchbox" type="text" placeholder="Search name / account…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <label class="chkinline">
+        OU:
+        <select @bind="ouDn" @bind:after="Load" style="max-width:220px">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+    </label>
+    <span class="grow"></span>
+    <button @onclick="Load">Refresh</button>
+</div>
+
+@if (selected.Count > 0)
+{
+    <div class="bulkbar">
+        <span class="count">@selected.Count selected</span>
+        <select @bind="bulkMoveTo" style="max-width:180px">
+            <option value="">move to…</option>
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <button @onclick="BulkMove" disabled="@string.IsNullOrEmpty(bulkMoveTo)">Move</button>
+        @if (!confirmBulkDelete) { <button class="danger" @onclick="() => confirmBulkDelete = true">Delete…</button> }
         else
         {
+            <button class="danger" @onclick="BulkDelete">Confirm delete @selected.Count</button>
+            <button @onclick="() => confirmBulkDelete = false">Cancel</button>
+        }
+        <button class="linkbtn" @onclick="ClearSel">clear</button>
+    </div>
+}
+
+@if (groups is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    var filtered = Filtered();
+    var total = filtered.Count;
+    var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+    if (page >= pages) page = pages - 1;
+    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
+
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
             <table>
-                <thead><tr><th>Name</th><th>Account</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th class="chk"><input type="checkbox" checked="@AllOnPageSelected(pageItems)" @onchange="e => TogglePage(pageItems, e)" /></th>
+                        <th>Name</th><th>Account</th><th></th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @foreach (var g in groups)
+                    @foreach (var g in pageItems)
                     {
-                        <tr class="selectable @(sel?.Dn == g.Dn ? "selected" : null)" @onclick="() => Select(g)">
-                            <td>@g.Name</td><td>@g.SamAccountName</td>
+                        <tr class="@(sel?.Dn == g.Dn ? "selected" : null)">
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(g.Dn)" @onchange="e => ToggleOne(g.Dn, e)" /></td>
+                            <td>@g.Name</td>
+                            <td>@g.SamAccountName</td>
+                            <td><button class="linkbtn" @onclick="() => Select(g)">Manage ▸</button></td>
                         </tr>
                     }
                 </tbody>
             </table>
-            <p class="hint">@groups.Count group(s)</p>
-        }
-
-        <hr />
-        <h3>Create group</h3>
-        <label>SAM account name</label><input type="text" @bind="ngSam" placeholder="Sales-Team" />
-        <label>Name</label><input type="text" @bind="ngName" placeholder="Sales Team" />
-        <label>Scope</label>
-        <select @bind="ngScope">
-            <option value="Global">Global</option>
-            <option value="DomainLocal">Domain local</option>
-            <option value="Universal">Universal</option>
-        </select>
-        <label>Type</label>
-        <select @bind="ngKind">
-            <option value="Security">Security</option>
-            <option value="Distribution">Distribution</option>
-        </select>
-        <div class="hint">Created in the selected OU.</div>
-        <div class="btnrow"><button class="primary" @onclick="CreateGroup" disabled="@(string.IsNullOrWhiteSpace(ngSam) || string.IsNullOrWhiteSpace(ngName))">Create group</button></div>
+        </div>
     </div>
 
+    <div class="pager">
+        <span>@total group(s)</span>
+        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <span>Page @(page + 1) / @pages</span>
+        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+    </div>
+}
+
+<div class="layout2" style="margin-top:16px">
     <div class="panel">
-        @if (sel is null) { <p class="muted">Select a group to manage.</p> }
+        @if (sel is null) { <p class="muted">Select a group (Manage ▸) to manage.</p> }
         else
         {
-            <h3>@sel.Name</h3>
+            <div class="panelhead"><h3>@sel.Name</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
             <p class="hint">@sel.Dn</p>
 
             <label>Add member</label>
@@ -127,20 +163,44 @@
             }
         }
     </div>
+
+    <div class="panel">
+        <h3>Create group</h3>
+        <label>SAM account name</label><input type="text" @bind="ngSam" placeholder="Sales-Team" />
+        <div class="hint">Pre-Windows 2000 account name for the group.</div>
+        <label>Name</label><input type="text" @bind="ngName" placeholder="Sales Team" />
+        <div class="hint">Display name shown in the directory.</div>
+        <label>Scope</label>
+        <select @bind="ngScope">
+            <option value="Global">Global</option>
+            <option value="DomainLocal">Domain local</option>
+            <option value="Universal">Universal</option>
+        </select>
+        <label>Type</label>
+        <select @bind="ngKind">
+            <option value="Security">Security</option>
+            <option value="Distribution">Distribution</option>
+        </select>
+        <div class="hint">Created in the selected OU.</div>
+        <div class="btnrow"><button class="primary" @onclick="CreateGroup" disabled="@(string.IsNullOrWhiteSpace(ngSam) || string.IsNullOrWhiteSpace(ngName))">Create group</button></div>
+    </div>
 </div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
+    private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdGroupSummary>? groups;
     private List<AdUserSummary>? allUsers;
     private List<AdUserSummary>? members;
     private AdGroupSummary? sel;
-    private string ouDn = "", addDn = "", renameTo = "", moveTo = "";
+    private readonly HashSet<string> selected = new();
+    private string search = "", ouDn = "", addDn = "", renameTo = "", moveTo = "", bulkMoveTo = "";
     private string ngSam = "", ngName = "", ngScope = "Global", ngKind = "Security";
     private string gDesc = "", gMail = "", gManagedBy = "", gInfo = "";
-    private string? banner; private bool ok; private bool confirmDelete;
+    private int page;
+    private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,8 +212,44 @@
 
     private async Task Load()
     {
-        try { groups = (await Dir.ListGroupsAsync(ouDn, subtree: true)).ToList(); sel = null; members = null; }
+        try { groups = (await Dir.ListGroupsAsync(ouDn, subtree: true)).ToList(); sel = null; members = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private List<AdGroupSummary> Filtered()
+    {
+        var q = groups!.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(g =>
+                (g.Name?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (g.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+        return q.ToList();
+    }
+
+    private bool AllOnPageSelected(List<AdGroupSummary> pageItems) => pageItems.Count > 0 && pageItems.All(g => selected.Contains(g.Dn));
+    private void TogglePage(List<AdGroupSummary> pageItems, ChangeEventArgs e)
+    {
+        var on = (bool)(e.Value ?? false);
+        foreach (var g in pageItems) { if (on) selected.Add(g.Dn); else selected.Remove(g.Dn); }
+    }
+    private void ToggleOne(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) selected.Add(dn); else selected.Remove(dn); }
+    private void ClearSel() { selected.Clear(); confirmBulkDelete = false; }
+
+    private async Task BulkMove()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.MoveAsync(actor, dn, bulkMoveTo); if (r.Success) okc++; else fail++; }
+        bulkMoveTo = ""; ok = fail == 0; banner = $"Move: {okc} ok, {fail} failed."; selected.Clear(); confirmBulkDelete = false; await Load();
+    }
+
+    private async Task BulkDelete()
+    {
+        var actor = await Actor(); int okc = 0, fail = 0;
+        foreach (var dn in selected.ToList()) { var r = await Mgmt.DeleteObjectAsync(actor, dn); if (r.Success) okc++; else fail++; }
+        ok = fail == 0; banner = $"Delete: {okc} ok, {fail} failed."; selected.Clear(); confirmBulkDelete = false; await Load();
     }
 
     private async Task<TechnicianContext> Actor()
