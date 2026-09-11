@@ -8,11 +8,13 @@
 - **Редактор шаблонов формы пользователя** (аналог ADManager «User Creation/Modification Templates»): страница `/templates` (список: edit/copy/delete) и Layout-редактор `/templates/edit` — Field Tray с полями по категориям, раскладка полей по вкладкам, переименование/добавление/перемещение вкладок, порядок полей (↑↓). Модель `UserTemplate`/`TemplateTab`/`FieldCatalog`, стор `IUserTemplateStore` → `FileUserTemplateStore` (`App_Data/user-templates.json`).
 - **Create user** переведён в табовую форму (General/Account/Address/Telephones/Organization/Profile), как правка.
 - **Шаблоны подключены к формам**: на `/users/create` и `/users/modify` — селектор «Layout template»; выбранный шаблон задаёт вкладки, набор и порядок полей (спец-контролы `__password`/`__enabled`/`__mustChange`/`__pwdNeverExpires`/`sAMAccountName`). Без выбора — дефолтная раскладка (`TemplateDefaults`). Create-форма показывает Create-шаблоны, Modify — Modify-шаблоны.
+- **Шаблоны — prefill/именование/обязательные поля**: per-field default value, авто-именование logon/UPN/display (`NamingRules`: First+Last, first.last, f+Last и т.д. — live на форме create), пометка required + валидация. Каталог полей расширен (Organization: employeeNumber/Type, division; Exchange: proxyAddresses, mailNickname, targetAddress; Profile: userWorkstations).
 
 ### Изменено (UI)
 - Фиксированные топбар и дерево — скроллится только контент (вкладки не «уезжают»).
 - **Users**: полноширинный грид всех пользователей домена вместо списка с боковой панелью; поиск, фильтры «Locked only»/«Disabled only», пагинация 50/стр, bulk-тулбар; правка — на отдельной странице `/users/modify`. Убран фильтр по OU (целевой OU остался в create и bulk-move).
 - Единое имя раздела «Users» (меню = заголовок).
+- **Groups/Computers/Contacts/Exchange** приведены к тому же полноширинному гриду, что и Users: поиск, пагинация (50/стр), чекбоксы + bulk-тулбар, per-row «Manage ▸/Mailbox ▸», форма создания и панель управления — под гридом. Все прежние операции сохранены.
 
 ## 2026-09-11 — начальный импорт
 

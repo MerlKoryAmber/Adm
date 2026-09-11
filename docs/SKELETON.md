@@ -35,7 +35,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
 - `IOperationalCredentialProvider` (+ `ConfiguredCredentialProvider`) — gMSA / StoredCredential.
 - `IAutomationScheduler` (+ `AutomationScheduler`), `IAutomationStore` (+ `FileAutomationStore`).
-- `IUserTemplateStore` (+ `FileUserTemplateStore`) — шаблоны формы пользователя (Layout View). Модель: `UserTemplate` (Name/Kind/Description/`Tabs`), `TemplateTab` (Title + список ключей полей), каталог `FieldCatalog` (`FieldDef` Key/Label/Category). `Templates.cs`.
+- `IUserTemplateStore` (+ `FileUserTemplateStore`) — шаблоны формы пользователя (Layout View). Модель: `UserTemplate` (Name/Kind/Description/`Tabs`), `TemplateTab` (Title + `List<TemplateField>`), `TemplateField` (Key/Default/Required/Naming); каталог `FieldCatalog` (`FieldDef` Key/Label/Category + IsSpecial/IsBool/SupportsNaming), `NamingRules` (авто-логон/UPN/display), `TemplateDefaults` (Create/Modify). `Templates.cs`.
 
 Сервисы-обёртки (RBAC + двухфазный аудит вокруг каждой операции):
 - `AdManagementService` — все AD-операции (актор-aware).
@@ -52,11 +52,11 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/users/bulk` | массовое создание из CSV. |
 | `/templates`, `/templates/edit` | **Form templates**: список (edit/copy/delete) + Layout-редактор (Field Tray → вкладки, переименование/добавление/перемещение вкладок, ↑↓ полей). Store — `App_Data/user-templates.json`. |
 | `/search` | Advanced search по атрибутам. |
-| `/groups` | Group Management: create group, membership, rename/move/delete. |
-| `/computers` | Computer Management: create, enable/disable, rename/move/delete. |
+| `/groups` | Group Management: **грид** (поиск/пагинация/bulk move/delete, Manage ▸) + create/membership/rename/move/delete. |
+| `/computers` | Computer Management: **грид** (поиск, Disabled only, bulk enable/disable/reset/move/delete) + create/rename/move/delete. |
 | `/ous` | OU Management: create/rename/move/delete. |
-| `/contacts` | Contact Management: create/delete. |
-| `/exchange` | Mailboxes (enable/disable/props) + distribution groups. |
+| `/contacts` | Contact Management: **грид** (поиск, bulk delete) + create/delete. |
+| `/exchange` | **грид** пользователей (Mailbox ▸, bulk enable/disable mailbox) + mailbox props + distribution groups. |
 | `/delegation` | Roles / Scopes / Assignments (реальный RBAC). |
 | `/automation` | Автоматизации (cron МСК, create/enable/trigger/delete). |
 | `/audit` | Журнал операций (МСК, attempt+result). |
