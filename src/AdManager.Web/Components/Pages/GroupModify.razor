@@ -1,0 +1,199 @@
+@page "/groups/modify"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Modify group — admanager</PageTitle>
+<h1>Modify group</h1>
+<p class="subtitle">@(loaded ? $"{gName} ({gSam}) — {Rdn(ParentOf(Dn))}" : "")</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+@if (!loaded)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="panel" style="max-width:680px">
+        <label>Add member</label>
+        <select @bind="addDn">
+            <option value="">— select a user —</option>
+            @foreach (var u in allUsers ?? Enumerable.Empty<AdUserSummary>())
+            {
+                <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
+            }
+        </select>
+        <div class="btnrow"><button class="primary" @onclick="Add" disabled="@string.IsNullOrEmpty(addDn)">Add to group</button></div>
+
+        <h3 style="margin-top:14px">Members</h3>
+        @if (members is null) { <p>Loading…</p> }
+        else if (members.Count == 0) { <p class="muted">No members.</p> }
+        else
+        {
+            <div class="fieldlist">
+                @foreach (var m in members)
+                {
+                    var mm = m;
+                    <div class="fieldrow"><span class="fname">@mm.DisplayName</span><span class="fkey">@mm.SamAccountName</span><span class="grow"></span><button class="linkbtn danger" @onclick="() => Remove(mm.Dn)">Remove</button></div>
+                }
+            </div>
+        }
+
+        <hr />
+        <h3>Attributes</h3>
+        <label>Description</label><input type="text" @bind="gDesc" />
+        <label>Email</label><input type="text" @bind="gMail" />
+        <label>Managed by</label>
+        <div class="toolbar" style="margin:4px 0">
+            <span class="grow">@(string.IsNullOrEmpty(managedByName) ? "— none —" : managedByName)</span>
+            @if (!string.IsNullOrEmpty(managedByName)) { <button class="linkbtn danger" @onclick="ClearManagedBy">Clear</button> }
+        </div>
+        <div class="toolbar" style="margin:4px 0">
+            <input class="grow" type="text" placeholder="find user or group by name…" @bind="mbSearch" @bind:event="oninput" />
+            <button @onclick="FindManagedBy" disabled="@string.IsNullOrWhiteSpace(mbSearch)">Find</button>
+        </div>
+        @if (mbResults is { Count: > 0 })
+        {
+            <div class="fieldlist">
+                @foreach (var m in mbResults)
+                {
+                    var mm = m;
+                    <div class="fieldrow"><span class="fname">@mm.Name</span><span class="fkey">@mm.ObjectClass</span><span class="grow"></span><button class="linkbtn" @onclick="() => PickManagedBy(mm)">Select</button></div>
+                }
+            </div>
+        }
+        <label>Notes</label><input type="text" @bind="gInfo" />
+        <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
+
+        <hr />
+        <label>Rename (new name)</label><input type="text" @bind="renameTo" />
+        <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
+        <label>Move to OU</label>
+        <select @bind="moveTo">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <div class="btnrow"><button @onclick="Move" disabled="@string.IsNullOrEmpty(moveTo)">Move</button></div>
+
+        <hr />
+        @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete group…</button> }
+        else
+        {
+            <div class="banner err">Delete group <b>@gSam</b>?</div>
+            <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
+        }
+
+        <div class="btnrow" style="margin-top:16px"><button @onclick='() => Nav.NavigateTo("groups")'>Back to groups</button></div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery] private string? Dn { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool loaded;
+    private List<AdOuNode>? ous;
+    private List<AdUserSummary>? allUsers;
+    private List<AdUserSummary>? members;
+    private string gName = "", gSam = "";
+    private string addDn = "", renameTo = "", moveTo = "";
+    private string gDesc = "", gMail = "", gInfo = "", gManagedBy = "", managedByName = "", mbSearch = "";
+    private List<AdSearchResult>? mbResults;
+    private string? banner; private bool ok; private bool confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Dn)) { banner = "No group specified."; ok = false; return; }
+        try
+        {
+            var det = await Dir.GetObjectAsync(Dn, new[] { "name", "sAMAccountName", "description", "mail", "info", "managedBy" });
+            if (det is null) { banner = "Group not found."; ok = false; return; }
+            gName = det.Attributes.GetValueOrDefault("name") ?? Rdn(Dn);
+            gSam = det.Attributes.GetValueOrDefault("sAMAccountName") ?? "";
+            gDesc = det.Attributes.GetValueOrDefault("description") ?? "";
+            gMail = det.Attributes.GetValueOrDefault("mail") ?? "";
+            gInfo = det.Attributes.GetValueOrDefault("info") ?? "";
+            gManagedBy = det.Attributes.GetValueOrDefault("managedBy") ?? "";
+            managedByName = Rdn(gManagedBy);
+            ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+            moveTo = ParentOf(Dn);
+            allUsers = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList();
+            members = (await Dir.ListGroupMembersAsync(Dn)).ToList();
+            loaded = true;
+        }
+        catch (Exception ex) { ok = false; banner = "Error loading group: " + ex.Message; }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task LoadMembers() => members = (await Dir.ListGroupMembersAsync(Dn!)).ToList();
+
+    private async Task Add() { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), Dn!, new[] { addDn }, Array.Empty<string>())); addDn = ""; await LoadMembers(); }
+    private async Task Remove(string dn) { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), Dn!, Array.Empty<string>(), new[] { dn })); await LoadMembers(); }
+
+    private async Task SaveAttrs()
+    {
+        var attrs = new Dictionary<string, string?>
+        {
+            ["description"] = gDesc,
+            ["mail"] = gMail,
+            ["info"] = gInfo,
+            ["managedBy"] = string.IsNullOrEmpty(gManagedBy) ? null : gManagedBy,
+        };
+        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs));
+    }
+
+    private async Task FindManagedBy()
+    {
+        mbResults = (await Dir.SearchAsync(Ui.BaseDn, mbSearch.Trim()))
+            .Where(x => !(x.ObjectClass?.Contains("computer", StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(10).ToList();
+    }
+    private void PickManagedBy(AdSearchResult m) { gManagedBy = m.Dn; managedByName = m.Name; mbResults = null; mbSearch = ""; }
+    private void ClearManagedBy() { gManagedBy = ""; managedByName = ""; }
+
+    private async Task Rename()
+    {
+        var r = await Mgmt.RenameAsync(await Actor(), Dn!, $"CN={renameTo.Trim()}");
+        if (r.Success) Nav.NavigateTo("groups"); else Show(r);
+    }
+    private async Task Move()
+    {
+        var r = await Mgmt.MoveAsync(await Actor(), Dn!, moveTo);
+        if (r.Success) Nav.NavigateTo("groups"); else Show(r);
+    }
+    private async Task Delete()
+    {
+        var r = await Mgmt.DeleteObjectAsync(await Actor(), Dn!);
+        if (r.Success) Nav.NavigateTo("groups"); else { confirmDelete = false; Show(r); }
+    }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+
+    private static string Rdn(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var eq = dn.IndexOf('='); if (eq < 0) return dn;
+        var comma = dn.IndexOf(',', eq);
+        var val = comma < 0 ? dn[(eq + 1)..] : dn[(eq + 1)..comma];
+        return val.Replace("\\,", ",").Replace("\\", "");
+    }
+    private static string ParentOf(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var comma = dn.IndexOf(','); return comma < 0 ? "" : dn[(comma + 1)..];
+    }
+    private static string Indent(int d) => new string(' ', d * 3);
+}

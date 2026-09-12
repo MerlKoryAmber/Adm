@@ -66,11 +66,12 @@ else
                 <tbody>
                     @foreach (var g in pageItems)
                     {
-                        <tr class="@(sel?.Dn == g.Dn ? "selected" : null)">
-                            <td class="chk"><input type="checkbox" checked="@selected.Contains(g.Dn)" @onchange="e => ToggleOne(g.Dn, e)" /></td>
-                            <td>@g.Name</td>
-                            <td>@g.SamAccountName</td>
-                            <td><button class="linkbtn" @onclick="() => Select(g)">Manage ▸</button></td>
+                        var gg = g;
+                        <tr>
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(gg.Dn)" @onchange="e => ToggleOne(gg.Dn, e)" /></td>
+                            <td>@gg.Name</td>
+                            <td>@gg.SamAccountName</td>
+                            <td><button class="linkbtn" @onclick="() => Modify(gg)">Modify ▸</button></td>
                         </tr>
                     }
                 </tbody>
@@ -88,101 +89,30 @@ else
     </div>
 }
 
-<div class="panel" style="margin-top:16px">
-        @if (sel is null) { <p class="muted">Select a group (Manage ▸) to manage.</p> }
-        else
-        {
-            <div class="panelhead"><h3>@sel.Name</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
-            <p class="hint">@sel.Dn</p>
-
-            <label>Add member</label>
-            <select @bind="addDn">
-                <option value="">— select a user —</option>
-                @if (allUsers is not null)
-                {
-                    @foreach (var u in allUsers)
-                    {
-                        <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
-                    }
-                }
-            </select>
-            <div class="btnrow"><button class="primary" @onclick="Add" disabled="@string.IsNullOrEmpty(addDn)">Add to group</button></div>
-
-            <h3 style="margin-top:14px">Members</h3>
-            @if (members is null) { <p>Loading…</p> }
-            else if (members.Count == 0) { <p class="muted">No members.</p> }
-            else
-            {
-                <table>
-                    <tbody>
-                        @foreach (var m in members)
-                        {
-                            <tr><td>@m.DisplayName</td><td>@m.SamAccountName</td>
-                                <td><button class="danger" @onclick="() => Remove(m.Dn)">Remove</button></td></tr>
-                        }
-                    </tbody>
-                </table>
-            }
-
-            <hr />
-            <h3>Attributes</h3>
-            <label>Description</label><input type="text" @bind="gDesc" />
-            <label>Email</label><input type="text" @bind="gMail" />
-            <label>Managed by (DN)</label><input type="text" @bind="gManagedBy" />
-            <label>Notes</label><input type="text" @bind="gInfo" />
-            <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
-
-            <hr />
-            <label>Rename (new CN)</label><input type="text" @bind="renameTo" />
-            <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
-            <label>Move to OU</label>
-            <select @bind="moveTo">
-                <option value="@Ui.BaseDn">(domain root)</option>
-                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-                {
-                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-                }
-            </select>
-            <div class="btnrow"><button @onclick="Move">Move</button></div>
-
-            <hr />
-            @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete group…</button> }
-            else
-            {
-                <div class="banner err">Delete group <b>@sel.SamAccountName</b>?</div>
-                <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
-            }
-        }
-</div>
-
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdGroupSummary>? groups;
-    private List<AdUserSummary>? allUsers;
-    private List<AdUserSummary>? members;
-    private AdGroupSummary? sel;
     private readonly HashSet<string> selected = new();
-    private string search = "", ouDn = "", addDn = "", renameTo = "", moveTo = "", bulkMoveTo = "";
-    private string gDesc = "", gMail = "", gManagedBy = "", gInfo = "";
+    private string search = "", bulkMoveTo = "";
     private int page;
-    private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
+    private string? banner; private bool ok; private bool confirmBulkDelete;
 
     protected override async Task OnInitializedAsync()
     {
         ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
-        ouDn = ous.Any(o => o.Dn == Ui.GroupsOu) ? Ui.GroupsOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
-        allUsers = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList();
         await Load();
     }
 
     private async Task Load()
     {
-        try { groups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList(); sel = null; members = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
+        try { groups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList(); selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
+
+    private void Modify(AdGroupSummary g) => Nav.NavigateTo($"groups/modify?dn={Uri.EscapeDataString(g.Dn)}");
 
     private List<AdGroupSummary> Filtered()
     {
@@ -226,31 +156,5 @@ else
         return CurrentUser.From(p);
     }
 
-    private async Task Select(AdGroupSummary g)
-    {
-        sel = g; banner = null; addDn = ""; renameTo = ""; moveTo = ouDn; confirmDelete = false;
-        await LoadMembers();
-        var det = await Dir.GetObjectAsync(g.Dn, new[] { "description", "mail", "managedBy", "info" });
-        gDesc = det?.Attributes.GetValueOrDefault("description") ?? "";
-        gMail = det?.Attributes.GetValueOrDefault("mail") ?? "";
-        gManagedBy = det?.Attributes.GetValueOrDefault("managedBy") ?? "";
-        gInfo = det?.Attributes.GetValueOrDefault("info") ?? "";
-    }
-
-    private async Task SaveAttrs()
-    {
-        var attrs = new Dictionary<string, string?> { ["description"] = gDesc, ["mail"] = gMail, ["managedBy"] = gManagedBy, ["info"] = gInfo };
-        Show(await Mgmt.SetAttributesAsync(await Actor(), sel!.Dn, attrs));
-    }
-
-    private async Task LoadMembers() => members = (await Dir.ListGroupMembersAsync(sel!.Dn)).ToList();
-
-    private async Task Add() { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), sel!.Dn, new[] { addDn }, Array.Empty<string>())); addDn = ""; await LoadMembers(); }
-    private async Task Remove(string dn) { Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), sel!.Dn, Array.Empty<string>(), new[] { dn })); await LoadMembers(); }
-    private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }
-    private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
-    private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
-
-    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);
 }

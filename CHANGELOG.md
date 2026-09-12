@@ -5,6 +5,7 @@
 ## 2026-09-12 — UI-редизайн раздела Users + редактор шаблонов формы
 
 ### Добавлено
+- **Groups/Computers: управление на отдельной странице** (как Users): «Manage ▸» → «Modify ▸» открывает `/groups/modify?dn=` и `/computers/modify?dn=` вместо инлайн-панели под гридом. Вся глубина сохранена (members/attrs/rename/move/delete, enable/disable/reset); managedBy — пикер по имени (без DN), подзаголовок читаемый.
 - **Контекстное левое меню по вкладкам**: активная верхняя вкладка определяется по маршруту; у каждой вкладки своё дерево — Management (объекты), Reports (список отчётов + Audit log), Delegation (Roles/Scopes/Assignments), Automation (Policies). Раньше дерево Management висело на всех вкладках, а «Management» всегда была active.
 - **Delegation — выбор субъекта по имени** вместо ручного ввода SID: поиск пользователя/группы → авто-резолв SID и типа (Technician/AdGroup); в назначении сохраняется читаемое имя (`RoleAssignment.SubjectName`). Модель по-прежнему SID-based (`IAdDirectory.GetSidAsync`). Отчёты открываются по `?r=<key>` из бокового дерева.
 - **Единая структура меню для всех разделов объектов**: как в Users, теперь у Groups/Computers/OU/Contacts — отдельные пункты «Modify …» (грид+управление) и «Create …» (отдельная страница). Формы создания вынесены на `/groups/create`, `/computers/create`, `/ous/create`, `/contacts/create`. Пункт «Users» переименован в «Modify users».

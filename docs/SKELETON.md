@@ -53,8 +53,8 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/users/bulk` | массовое создание из CSV. |
 | `/templates`, `/templates/edit` | **Form templates**: список (edit/copy/delete) + Layout-редактор (Field Tray → вкладки, переименование/добавление/перемещение вкладок, ↑↓ полей). Store — `App_Data/user-templates.json`. |
 | `/search` | Advanced search по атрибутам. |
-| `/groups`, `/groups/create` | Group Management: грид (Modify) + отдельная страница создания; membership/rename/move/delete. |
-| `/computers`, `/computers/create` | Computer Management: грид (Modify) + создание; enable/disable/reset/rename/move/delete. |
+| `/groups`, `/groups/create`, `/groups/modify` | Group Management: грид + создание + отдельная страница управления (members/attrs/managedBy-picker/rename/move/delete). |
+| `/computers`, `/computers/create`, `/computers/modify` | Computer Management: грид + создание + отдельная страница управления (enable/disable/reset/attrs/rename/move/delete). |
 | `/ous`, `/ous/create` | OU Management: список (Modify) + создание; rename/move/delete. |
 | `/contacts`, `/contacts/create` | Contact Management: грид (Modify) + создание; bulk/ per-row delete. |
 | `/exchange` | **грид** пользователей (Mailbox ▸, bulk enable/disable mailbox) + mailbox props + distribution groups. |

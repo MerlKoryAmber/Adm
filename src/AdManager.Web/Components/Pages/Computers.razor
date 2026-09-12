@@ -70,12 +70,13 @@ else
                 <tbody>
                     @foreach (var c in pageItems)
                     {
-                        <tr class="@(sel?.Dn == c.Dn ? "selected" : null)">
-                            <td class="chk"><input type="checkbox" checked="@selected.Contains(c.Dn)" @onchange="e => ToggleOne(c.Dn, e)" /></td>
-                            <td>@c.Name</td>
-                            <td>@(c.OperatingSystem ?? "—")</td>
-                            <td><span class="badge @(c.Enabled ? "ok" : "off")">@(c.Enabled ? "Enabled" : "Disabled")</span></td>
-                            <td><button class="linkbtn" @onclick="() => Select(c)">Manage ▸</button></td>
+                        var cc = c;
+                        <tr>
+                            <td class="chk"><input type="checkbox" checked="@selected.Contains(cc.Dn)" @onchange="e => ToggleOne(cc.Dn, e)" /></td>
+                            <td>@cc.Name</td>
+                            <td>@(cc.OperatingSystem ?? "—")</td>
+                            <td><span class="badge @(cc.Enabled ? "ok" : "off")">@(cc.Enabled ? "Enabled" : "Disabled")</span></td>
+                            <td><button class="linkbtn" @onclick="() => Modify(cc)">Modify ▸</button></td>
                         </tr>
                     }
                 </tbody>
@@ -93,77 +94,31 @@ else
     </div>
 }
 
-<div class="panel" style="margin-top:16px">
-        @if (sel is null) { <p class="muted">Select a computer (Manage ▸) to manage.</p> }
-        else
-        {
-            <div class="panelhead"><h3>@sel.Name</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
-            <p class="hint">@sel.Dn</p>
-            <div class="btnrow">
-                @if (sel.Enabled) { <button @onclick="() => SetEnabled(false)">Disable</button> }
-                else { <button class="primary" @onclick="() => SetEnabled(true)">Enable</button> }
-                <button @onclick="ResetAccount">Reset account</button>
-            </div>
-
-            <h3 style="margin-top:12px">Attributes</h3>
-            <label>Description</label><input type="text" @bind="cDesc" />
-            <label>Location</label><input type="text" @bind="cLocation" />
-            <label>Managed by (DN)</label><input type="text" @bind="cManagedBy" />
-            <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
-
-            <hr />
-            <label>Rename (new CN)</label>
-            <input type="text" @bind="renameTo" />
-            <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
-
-            <label>Move to OU</label>
-            <select @bind="moveTo">
-                <option value="@Ui.BaseDn">(domain root)</option>
-                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-                {
-                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-                }
-            </select>
-            <div class="btnrow"><button @onclick="Move">Move</button></div>
-
-            <hr />
-            @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete…</button> }
-            else
-            {
-                <div class="banner err">Delete <b>@sel.Name</b>?</div>
-                <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
-            }
-        }
-</div>
-
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private const int PageSize = 50;
     private List<AdOuNode>? ous;
     private List<AdComputerSummary>? items;
-    private AdComputerSummary? sel;
     private readonly HashSet<string> selected = new();
-    private string search = "", ouDn = "";
+    private string search = "", bulkMoveTo = "";
     private bool onlyDisabled;
-    private string renameTo = "", moveTo = "", bulkMoveTo = "";
-    private string cDesc = "", cLocation = "", cManagedBy = "";
     private int page;
-    private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
+    private string? banner; private bool ok; private bool confirmBulkDelete;
 
     protected override async Task OnInitializedAsync()
     {
         ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
-        ouDn = ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn;
-        moveTo = ouDn;
         await Load();
     }
 
     private async Task Load()
     {
-        try { items = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).ToList(); sel = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
+        try { items = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).ToList(); selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
+
+    private void Modify(AdComputerSummary c) => Nav.NavigateTo($"computers/modify?dn={Uri.EscapeDataString(c.Dn)}");
 
     private List<AdComputerSummary> Filtered()
     {
@@ -228,28 +183,5 @@ else
         return CurrentUser.From(p);
     }
 
-    private async Task Select(AdComputerSummary c)
-    {
-        sel = c; banner = null; confirmDelete = false; renameTo = ""; moveTo = ouDn;
-        var det = await Dir.GetObjectAsync(c.Dn, new[] { "description", "location", "managedBy" });
-        cDesc = det?.Attributes.GetValueOrDefault("description") ?? "";
-        cLocation = det?.Attributes.GetValueOrDefault("location") ?? "";
-        cManagedBy = det?.Attributes.GetValueOrDefault("managedBy") ?? "";
-    }
-
-    private async Task SaveAttrs()
-    {
-        var attrs = new Dictionary<string, string?> { ["description"] = cDesc, ["location"] = cLocation, ["managedBy"] = cManagedBy };
-        Show(await Mgmt.SetAttributesAsync(await Actor(), sel!.Dn, attrs));
-    }
-
-    private async Task ResetAccount() { Show(await Mgmt.ResetComputerAccountAsync(await Actor(), sel!.Dn)); }
-
-    private async Task SetEnabled(bool en) { Show(await Mgmt.SetEnabledAsync(await Actor(), sel!.Dn, en)); await Load(); }
-    private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }
-    private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
-    private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
-
-    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);
 }

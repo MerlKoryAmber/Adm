@@ -1,0 +1,179 @@
+@page "/computers/modify"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Modify computer — admanager</PageTitle>
+<h1>Modify computer</h1>
+<p class="subtitle">@(loaded ? $"{cName} — {Rdn(ParentOf(Dn))}" : "")</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+@if (!loaded)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="panel" style="max-width:640px">
+        <div class="btnrow">
+            @if (enabled) { <button @onclick="() => SetEnabled(false)">Disable</button> }
+            else { <button class="primary" @onclick="() => SetEnabled(true)">Enable</button> }
+            <button @onclick="ResetAccount">Reset account</button>
+            <span class="badge @(enabled ? "ok" : "off")">@(enabled ? "Enabled" : "Disabled")</span>
+        </div>
+
+        <h3 style="margin-top:12px">Attributes</h3>
+        <label>Description</label><input type="text" @bind="cDesc" />
+        <label>Location</label><input type="text" @bind="cLocation" />
+        <label>Managed by</label>
+        <div class="toolbar" style="margin:4px 0">
+            <span class="grow">@(string.IsNullOrEmpty(managedByName) ? "— none —" : managedByName)</span>
+            @if (!string.IsNullOrEmpty(managedByName)) { <button class="linkbtn danger" @onclick="ClearManagedBy">Clear</button> }
+        </div>
+        <div class="toolbar" style="margin:4px 0">
+            <input class="grow" type="text" placeholder="find user or group by name…" @bind="mbSearch" @bind:event="oninput" />
+            <button @onclick="FindManagedBy" disabled="@string.IsNullOrWhiteSpace(mbSearch)">Find</button>
+        </div>
+        @if (mbResults is { Count: > 0 })
+        {
+            <div class="fieldlist">
+                @foreach (var m in mbResults)
+                {
+                    var mm = m;
+                    <div class="fieldrow"><span class="fname">@mm.Name</span><span class="fkey">@mm.ObjectClass</span><span class="grow"></span><button class="linkbtn" @onclick="() => PickManagedBy(mm)">Select</button></div>
+                }
+            </div>
+        }
+        <div class="btnrow"><button class="primary" @onclick="SaveAttrs">Save attributes</button></div>
+
+        <hr />
+        <label>Rename (new name)</label><input type="text" @bind="renameTo" />
+        <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
+
+        <label>Move to OU</label>
+        <select @bind="moveTo">
+            <option value="@Ui.BaseDn">(domain root)</option>
+            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+            {
+                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+            }
+        </select>
+        <div class="btnrow"><button @onclick="Move" disabled="@string.IsNullOrEmpty(moveTo)">Move</button></div>
+
+        <hr />
+        @if (!confirmDelete) { <button class="danger" @onclick="() => confirmDelete = true">Delete…</button> }
+        else
+        {
+            <div class="banner err">Delete <b>@cName</b>?</div>
+            <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
+        }
+
+        <div class="btnrow" style="margin-top:16px"><button @onclick='() => Nav.NavigateTo("computers")'>Back to computers</button></div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery] private string? Dn { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool loaded, enabled;
+    private List<AdOuNode>? ous;
+    private string cName = "";
+    private string cDesc = "", cLocation = "", cManagedBy = "", managedByName = "", mbSearch = "";
+    private List<AdSearchResult>? mbResults;
+    private string renameTo = "", moveTo = "";
+    private string? banner; private bool ok; private bool confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Dn)) { banner = "No computer specified."; ok = false; return; }
+        try
+        {
+            var det = await Dir.GetObjectAsync(Dn, new[] { "name", "description", "location", "managedBy", "userAccountControl" });
+            if (det is null) { banner = "Computer not found."; ok = false; return; }
+            cName = det.Attributes.GetValueOrDefault("name") ?? Rdn(Dn);
+            cDesc = det.Attributes.GetValueOrDefault("description") ?? "";
+            cLocation = det.Attributes.GetValueOrDefault("location") ?? "";
+            cManagedBy = det.Attributes.GetValueOrDefault("managedBy") ?? "";
+            managedByName = Rdn(cManagedBy);
+            var uac = int.TryParse(det.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
+            enabled = (uac & 0x2) == 0;
+            ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+            moveTo = ParentOf(Dn);
+            loaded = true;
+        }
+        catch (Exception ex) { ok = false; banner = "Error loading computer: " + ex.Message; }
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task SetEnabled(bool en)
+    {
+        var r = await Mgmt.SetEnabledAsync(await Actor(), Dn!, en);
+        if (r.Success) enabled = en;
+        Show(r);
+    }
+    private async Task ResetAccount() => Show(await Mgmt.ResetComputerAccountAsync(await Actor(), Dn!));
+
+    private async Task SaveAttrs()
+    {
+        var attrs = new Dictionary<string, string?>
+        {
+            ["description"] = cDesc,
+            ["location"] = cLocation,
+            ["managedBy"] = string.IsNullOrEmpty(cManagedBy) ? null : cManagedBy,
+        };
+        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs));
+    }
+
+    private async Task FindManagedBy()
+    {
+        mbResults = (await Dir.SearchAsync(Ui.BaseDn, mbSearch.Trim()))
+            .Where(x => !(x.ObjectClass?.Contains("computer", StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(10).ToList();
+    }
+    private void PickManagedBy(AdSearchResult m) { cManagedBy = m.Dn; managedByName = m.Name; mbResults = null; mbSearch = ""; }
+    private void ClearManagedBy() { cManagedBy = ""; managedByName = ""; }
+
+    private async Task Rename()
+    {
+        var r = await Mgmt.RenameAsync(await Actor(), Dn!, $"CN={renameTo.Trim()}");
+        if (r.Success) Nav.NavigateTo("computers"); else Show(r);
+    }
+    private async Task Move()
+    {
+        var r = await Mgmt.MoveAsync(await Actor(), Dn!, moveTo);
+        if (r.Success) Nav.NavigateTo("computers"); else Show(r);
+    }
+    private async Task Delete()
+    {
+        var r = await Mgmt.DeleteObjectAsync(await Actor(), Dn!);
+        if (r.Success) Nav.NavigateTo("computers"); else { confirmDelete = false; Show(r); }
+    }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
+
+    private static string Rdn(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var eq = dn.IndexOf('='); if (eq < 0) return dn;
+        var comma = dn.IndexOf(',', eq);
+        var val = comma < 0 ? dn[(eq + 1)..] : dn[(eq + 1)..comma];
+        return val.Replace("\\,", ",").Replace("\\", "");
+    }
+    private static string ParentOf(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var comma = dn.IndexOf(','); return comma < 0 ? "" : dn[(comma + 1)..];
+    }
+    private static string Indent(int d) => new string(' ', d * 3);
+}
