@@ -1,6 +1,6 @@
 # SKELETON.md — структурная карта admanager
 
-Обновлено: 2026-09-12 МСК. Читать перед задачей, чинить перед push (§22).
+Обновлено: 2026-09-13 МСК. Читать перед задачей, чинить перед push (§22).
 
 Веб-панель управления и делегирования on-prem AD + Exchange 2019. Аналог ManageEngine ADManager Plus.
 UI — английский, тёмная тема (палитра squid-panel), макет ADManager Plus (см. ADR-0003).
@@ -31,7 +31,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IAdDirectory` — чтение: users/groups/computers/contacts/OU, all-OUs, объект по атрибутам, члены группы.
 - `IExchangeService` — mailbox enable/disable/props, distribution create/membership, права ящика (Full Access/Send As/Send on Behalf, `Permission.ManageMailboxPermissions`).
 - `IGpoDirectory` (+ `GpoDirectory`) — чтение GPO и линков (gPLink); `IGpoService` (+ `GpoService`) — link/unlink/enforce/enable. Обёртка `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). DTO `GpoSummary`/`GpoLink` (`Abstractions.Gpo.cs`).
-- `IRbacEngine` (+ `RbacEngine`, `AllowAllRbacEngine`) — авторизация операции.
+- `IRbacEngine` (+ `RbacEngine`, `AllowAllRbacEngine`) — авторизация операции + `AllowedFieldsAsync` (пополевые права CreateUser/ModifyAttributes → `FieldPermission`). `HelpDeskRole.CreateUserFields`/`ModifyUserFields` (ключи FieldCatalog; пусто = все поля). Enforcement: `AdManagementService` фильтрует атрибуты/спец-операции; формы Create/Modify скрывают запрещённые поля (`FieldPicker` в Delegation).
 - `IRbacStore` (+ `FileRbacStore`) — роли/scope/назначения.
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
 - `IOperationalCredentialProvider` (+ `ConfiguredCredentialProvider`) — gMSA / StoredCredential.

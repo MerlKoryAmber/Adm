@@ -55,6 +55,9 @@ public sealed class AllowAllRbacEngine : IRbacEngine
 {
     public Task<AuthorizationDecision> AuthorizeAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default)
         => Task.FromResult(new AuthorizationDecision(true, "AllowAll (Фаза 0)"));
+
+    public Task<FieldPermission> AllowedFieldsAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default)
+        => Task.FromResult(FieldPermission.All);
 }
 
 /// <summary>Время МСК (§20).</summary>

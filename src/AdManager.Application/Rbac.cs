@@ -75,6 +75,39 @@ public sealed class RbacEngine : IRbacEngine
         return new AuthorizationDecision(false, $"no delegated role grants {operation} on target");
     }
 
+    public async Task<FieldPermission> AllowedFieldsAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default)
+    {
+        // Пополевые ограничения определены только для этих двух операций.
+        if (operation is not (Permission.CreateUser or Permission.ModifyAttributes))
+            return FieldPermission.All;
+
+        if (IsSuperAdmin(actor)) return FieldPermission.All;
+
+        var cfg = await _store.LoadAsync(ct);
+        var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
+        if (actor.GroupSids is not null)
+            foreach (var g in actor.GroupSids) subjects.Add(g);
+
+        var fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var matchedAny = false;
+        foreach (var a in cfg.Assignments.Where(a => subjects.Contains(a.SubjectSid)))
+        {
+            var role = cfg.Roles.FirstOrDefault(r => r.Id == a.RoleId);
+            if (role is null || !role.Permissions.Contains(operation)) continue;
+            var scope = cfg.Scopes.FirstOrDefault(s => s.Id == a.ScopeId);
+            if (scope is null || !ScopeMatches(scope, targetDn)) continue;
+
+            matchedAny = true;
+            var roleFields = operation == Permission.CreateUser ? role.CreateUserFields : role.ModifyUserFields;
+            // Роль без пополевого списка = без ограничений; она снимает ограничения со всего объединения.
+            if (roleFields.Count == 0) return FieldPermission.All;
+            foreach (var f in roleFields) fields.Add(f);
+        }
+
+        // Нет ни одной подходящей роли — операция всё равно не пройдёт в AuthorizeAsync; поля пусты.
+        return matchedAny ? new FieldPermission(false, fields) : FieldPermission.None;
+    }
+
     private bool IsSuperAdmin(TechnicianContext actor)
     {
         if (string.Equals(actor.Sid, _options.AutomationSid, StringComparison.Ordinal)) return true;

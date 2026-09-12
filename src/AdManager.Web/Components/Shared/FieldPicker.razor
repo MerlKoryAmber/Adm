@@ -1,0 +1,43 @@
+@namespace AdManager.Web.Components.Shared
+
+@* Пополевые галки (FieldCatalog), сгруппированные по категориям. Пусто = все поля разрешены. *@
+
+<div class="fieldpicker" style="margin-top:8px;border:1px solid var(--border);border-radius:6px;padding:8px">
+    <div class="toolbar" style="margin-bottom:6px">
+        <strong>@Title</strong>
+        <span class="grow"></span>
+        <span class="hint">@(Selected.Count == 0 ? "All fields" : $"{Selected.Count} field(s)")</span>
+        <button class="linkbtn" type="button" @onclick="Clear" disabled="@(Selected.Count == 0)">Clear</button>
+    </div>
+    @if (!string.IsNullOrEmpty(Hint)) { <div class="hint" style="margin-bottom:6px">@Hint</div> }
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        @foreach (var cat in FieldCatalog.Categories)
+        {
+            <div>
+                <div class="treegroup" style="margin:2px 0">@cat</div>
+                @foreach (var f in FieldCatalog.All.Where(x => x.Category == cat))
+                {
+                    var key = f.Key;
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
+                        <input type="checkbox" checked="@Selected.Contains(key)" @onchange="e => Toggle(key, e)" />
+                        <span>@f.Label</span>
+                    </label>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter, EditorRequired] public HashSet<string> Selected { get; set; } = new();
+
+    private void Toggle(string key, ChangeEventArgs e)
+    {
+        if ((bool)(e.Value ?? false)) Selected.Add(key); else Selected.Remove(key);
+    }
+
+    private void Clear() => Selected.Clear();
+}

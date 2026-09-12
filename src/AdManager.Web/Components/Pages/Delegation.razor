@@ -28,7 +28,12 @@ else
                 <table><tbody>
                     @foreach (var r in cfg.Roles)
                     {
-                        <tr><td><b>@r.Name</b><div class="hint">@string.Join(", ", r.Permissions)</div></td>
+                        <tr><td><b>@r.Name</b><div class="hint">@string.Join(", ", r.Permissions)</div>
+                            @if (r.Permissions.Contains(Permission.CreateUser) && r.CreateUserFields.Count > 0)
+                            { <div class="hint">Create fields: @string.Join(", ", r.CreateUserFields.Select(FieldCatalog.Label))</div> }
+                            @if (r.Permissions.Contains(Permission.ModifyAttributes) && r.ModifyUserFields.Count > 0)
+                            { <div class="hint">Modify fields: @string.Join(", ", r.ModifyUserFields.Select(FieldCatalog.Label))</div> }
+                            </td>
                             <td><button class="danger" @onclick="() => DeleteRole(r.Id)">Delete</button></td></tr>
                     }
                 </tbody></table>
@@ -45,6 +50,14 @@ else
                     </label>
                 }
             </div>
+            @if (rolePerms.Contains(Permission.CreateUser))
+            {
+                <FieldPicker Title="Create user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="createFields" />
+            }
+            @if (rolePerms.Contains(Permission.ModifyAttributes))
+            {
+                <FieldPicker Title="Modify user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
+            }
             <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || rolePerms.Count == 0)">Create role</button></div>
         </div>
     }
@@ -166,6 +179,8 @@ else
 
     private string roleName = "";
     private readonly HashSet<Permission> rolePerms = new();
+    private readonly HashSet<string> createFields = new();
+    private readonly HashSet<string> modifyFields = new();
 
     private string scopeName = "";
     private readonly HashSet<string> scopeOus = new();
@@ -195,8 +210,15 @@ else
 
     private async Task CreateRole()
     {
-        cfg!.Roles.Add(new HelpDeskRole { Name = roleName.Trim(), Permissions = new HashSet<Permission>(rolePerms) });
-        await Save("Role created."); roleName = ""; rolePerms.Clear();
+        cfg!.Roles.Add(new HelpDeskRole
+        {
+            Name = roleName.Trim(),
+            Permissions = new HashSet<Permission>(rolePerms),
+            CreateUserFields = rolePerms.Contains(Permission.CreateUser) ? new HashSet<string>(createFields) : new(),
+            ModifyUserFields = rolePerms.Contains(Permission.ModifyAttributes) ? new HashSet<string>(modifyFields) : new(),
+        });
+        await Save("Role created.");
+        roleName = ""; rolePerms.Clear(); createFields.Clear(); modifyFields.Clear();
     }
     private async Task DeleteRole(Guid id) { cfg!.Roles.RemoveAll(r => r.Id == id); await Save("Role deleted."); }
 

@@ -122,10 +122,24 @@ public interface IExchangeService
     Task<OperationResult> SetSendOnBehalfAsync(string identity, string trustee, bool add, CancellationToken ct = default);
 }
 
+/// <summary>Какие поля техник вправе задавать для операции над объектом.</summary>
+/// <param name="Unrestricted">true = ограничений нет (роль без пополевого списка) — разрешены все поля.</param>
+/// <param name="Fields">Разрешённые ключи полей (FieldCatalog), когда <paramref name="Unrestricted"/> = false.</param>
+public sealed record FieldPermission(bool Unrestricted, IReadOnlySet<string> Fields)
+{
+    public bool Allows(string fieldKey) => Unrestricted || Fields.Contains(fieldKey);
+    public static readonly FieldPermission All = new(true, new HashSet<string>());
+    public static readonly FieldPermission None = new(false, new HashSet<string>());
+}
+
 /// <summary>Граница безопасности: разрешена ли операция технику над объектом (роль + scope).</summary>
 public interface IRbacEngine
 {
     Task<AuthorizationDecision> AuthorizeAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default);
+
+    /// <summary>Разрешённые поля для CreateUser/ModifyAttributes над targetDn (объединение по совпавшим ролям;
+    /// роль без списка = без ограничений). Только для этих двух операций; для прочих — <see cref="FieldPermission.All"/>.</summary>
+    Task<FieldPermission> AllowedFieldsAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default);
 }
 
 /// <summary>Неизменяемый аудит (§аудит).</summary>

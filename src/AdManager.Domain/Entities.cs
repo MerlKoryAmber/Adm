@@ -10,12 +10,20 @@ public enum SubjectType
 
 public sealed record Technician(string Sid, string Upn, string DisplayName);
 
-/// <summary>Роль = набор разрешённых операций.</summary>
+/// <summary>Роль = набор разрешённых операций + (опционально) пополевые ограничения.</summary>
 public sealed class HelpDeskRole
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string Name { get; init; }
     public HashSet<Permission> Permissions { get; init; } = new();
+
+    /// <summary>Ключи полей (FieldCatalog), которые роль разрешает задавать при создании пользователя.
+    /// Пустой набор = ограничений нет (все поля), обратная совместимость. Уточняет <see cref="Permission.CreateUser"/>.</summary>
+    public HashSet<string> CreateUserFields { get; init; } = new();
+
+    /// <summary>Ключи полей (FieldCatalog), которые роль разрешает менять у пользователя.
+    /// Пустой набор = ограничений нет (все поля). Уточняет <see cref="Permission.ModifyAttributes"/>.</summary>
+    public HashSet<string> ModifyUserFields { get; init; } = new();
 }
 
 /// <summary>На какие объекты распространяется роль.</summary>

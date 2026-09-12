@@ -1,6 +1,7 @@
 @page "/users/create"
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
+@inject IRbacEngine Rbac
 @inject IUserTemplateStore Templates
 @inject UiOptions Ui
 @inject NavigationManager Nav
@@ -17,7 +18,7 @@
     <div class="grid2">
         <div>
             <label>Target OU</label>
-            <select @bind="ouDn">
+            <select @bind="ouDn" @bind:after="RefreshAllowedFields">
                 <option value="@Ui.BaseDn">(domain root)</option>
                 @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
                 {
@@ -51,6 +52,7 @@
     {
         var key = f.Key;
         var req = f.Required ? " *" : "";
+        if (!allowedFields.Allows(key)) { continue; }
         @if (key == "sAMAccountName")
         {
             <label>SAM account name@(req)</label>
@@ -124,6 +126,7 @@
     private bool enabled = true, mustChange, pwdNeverExpires;
     private string createHomeDir = "", createHomeDrive = "";
     private string? banner; private bool ok;
+    private FieldPermission allowedFields = FieldPermission.All;
 
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
@@ -135,6 +138,13 @@
         ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
         templates = (await Templates.ListAsync()).Where(t => t.Kind == "Create").ToList();
         ApplyTemplateDefaults();
+        await RefreshAllowedFields();
+    }
+
+    private async Task RefreshAllowedFields()
+    {
+        var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
+        allowedFields = await Rbac.AllowedFieldsAsync(actor, Permission.CreateUser, ouDn);
     }
 
     private void OnTemplateChange()

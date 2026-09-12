@@ -1,6 +1,7 @@
 @page "/users/modify"
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
+@inject IRbacEngine Rbac
 @inject IUserTemplateStore Templates
 @inject UiOptions Ui
 @inject NavigationManager Nav
@@ -44,6 +45,7 @@ else
         {
             var key = f.Key;
             var req = f.Required ? " *" : "";
+            if (!allowedFields.Allows(key)) { continue; }
             @if (key == "sAMAccountName")
             {
                 <label>SAM account name</label>
@@ -284,11 +286,14 @@ else
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
 
+    private FieldPermission allowedFields = FieldPermission.All;
+
     protected override async Task OnInitializedAsync()
     {
         if (string.IsNullOrEmpty(Dn)) { banner = "No user specified."; ok = false; return; }
         try
         {
+            allowedFields = await Rbac.AllowedFieldsAsync(await Actor(), Permission.ModifyAttributes, Dn);
             var wanted = TextKeys.Concat(new[] { "sAMAccountName", "userAccountControl" }).ToArray();
             var det = await Dir.GetObjectAsync(Dn, wanted);
             if (det is null) { banner = "User not found (may have been moved or deleted)."; ok = false; return; }

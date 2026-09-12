@@ -1,6 +1,6 @@
 # CURRENT — текущее состояние
 
-Обновлено: 2026-09-12 МСК.
+Обновлено: 2026-09-13 МСК.
 
 ## Кратко
 - Ветка `feature/ad-full-management` = `main` = **`326671f`**, запушены на GitHub (`MerlKoryAmber/Adm`). Рабочее дерево чистое.
@@ -21,6 +21,7 @@
 - **Exchange — права ящиков**: Full Access / Send As / Send on Behalf (`Permission.ManageMailboxPermissions`). Рантайм не верифицирован.
 - **Меню/навигация**: контекстное левое дерево по вкладкам + активная вкладка по маршруту; единый паттерн **Modify/Create** для Groups/Computers/OU/Contacts; управление Groups/Computers — на отдельных страницах `/{groups,computers}/modify?dn=` (не инлайн). Фильтры списков унифицированы (без OU-фильтра; в Users — Locked/Disabled/Hide disabled).
 - **Delegation**: выбор субъекта **по имени** с авто-резолвом SID (`IAdDirectory.GetSidAsync`, `RoleAssignment.SubjectName`); модель остаётся SID-based. Секции Roles/Scopes/Assignments переключаются по левому дереву (`?s=<section>`), показывается одна за раз (не все три сразу), дефолт — Roles.
+- **Пополевые права в ролях** (модель ADManager): роль хранит `CreateUserFields`/`ModifyUserFields` (ключи FieldCatalog; пусто = все поля — обратная совместимость). UI роли — `FieldPicker` под галками CreateUser/ModifyAttributes. Enforcement UI+сервер: `RbacEngine.AllowedFieldsAsync` → `FieldPermission`; `AdManagementService` отклоняет запрещённые поля (attrs, multi-value, logon hours, primary group) с аудитом; формы Create/Modify скрывают запрещённые поля. Тесты: RbacEngineTests 10/10 (вкл. пополевые + round-trip стора).
 - **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
 ## Отложено (WIP-ветки на GitHub, НЕ собираются целиком — доделать)
