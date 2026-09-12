@@ -16,11 +16,11 @@
 ## Сделано в сессии 2026-09-12 (сверх ночи 11-го)
 - **Матрица атрибутов пользователя ADUC — покрыта**: General; Account (UAC-флаги: PNE, must-change, reversible-enc, smartcard, not-delegated, DES-only, no-preauth, cannot-change [UAC 0x40, оговорка ниже]) + **Logon Hours** (7×24); Address + **Country** (c/co/countryCode одним селектором); Telephones + **Other… multi-valued**; Organization; Profile + **Home folder** (Local/Connect); **Member Of** + **Primary Group**. Менеджер/managedBy — пикеры по имени. **DN в UI не показываются.**
 - **Form templates**: Layout-редактор (`/templates`,`/templates/edit`) — Field Tray, вкладки, per-field default/required/**auto-naming**; подключены к `/users/create` и `/users/modify` (селектор Layout template).
-- **Reports** (`/reports`): реальные отчёты + фильтр/пагинация + CSV-экспорт; открытие отчёта по `?r=<key>`.
+- **Reports** (`/reports`): реальные отчёты + фильтр/пагинация + CSV-экспорт; переключение отчётов только через левое дерево (`?r=<key>`), дубль-колонка кнопок в теле убрана.
 - **Group Policy — новый пиллар** (`/gpo`): список GPO + управление линками (gPLink: link/unlink/enforce/enable), RBAC+аудит (`Permission.ManageGpoLinks`).
 - **Exchange — права ящиков**: Full Access / Send As / Send on Behalf (`Permission.ManageMailboxPermissions`). Рантайм не верифицирован.
 - **Меню/навигация**: контекстное левое дерево по вкладкам + активная вкладка по маршруту; единый паттерн **Modify/Create** для Groups/Computers/OU/Contacts; управление Groups/Computers — на отдельных страницах `/{groups,computers}/modify?dn=` (не инлайн). Фильтры списков унифицированы (без OU-фильтра; в Users — Locked/Disabled/Hide disabled).
-- **Delegation**: выбор субъекта **по имени** с авто-резолвом SID (`IAdDirectory.GetSidAsync`, `RoleAssignment.SubjectName`); модель остаётся SID-based.
+- **Delegation**: выбор субъекта **по имени** с авто-резолвом SID (`IAdDirectory.GetSidAsync`, `RoleAssignment.SubjectName`); модель остаётся SID-based. Секции Roles/Scopes/Assignments переключаются по левому дереву (`?s=<section>`), показывается одна за раз (не все три сразу), дефолт — Roles.
 - **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
 ## Отложено (WIP-ветки на GitHub, НЕ собираются целиком — доделать)

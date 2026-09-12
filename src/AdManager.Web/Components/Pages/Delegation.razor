@@ -18,7 +18,8 @@
 }
 else
 {
-    <div class="layout2">
+    @if (section == "roles")
+    {
         <div class="panel" id="roles">
             <h3>Roles</h3>
             @if (cfg.Roles.Count == 0) { <p class="muted">No roles.</p> }
@@ -46,7 +47,10 @@ else
             </div>
             <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || rolePerms.Count == 0)">Create role</button></div>
         </div>
+    }
 
+    @if (section == "scopes")
+    {
         <div class="panel" id="scopes">
             <h3>Scopes</h3>
             @if (cfg.Scopes.Count == 0) { <p class="muted">No scopes.</p> }
@@ -76,9 +80,11 @@ else
             <div class="checkbox"><input type="checkbox" id="sub" @bind="scopeSubtree" /><label for="sub">Include subtree</label></div>
             <div class="btnrow"><button class="primary" @onclick="CreateScope" disabled="@(string.IsNullOrWhiteSpace(scopeName) || scopeOus.Count == 0)">Create scope</button></div>
         </div>
-    </div>
+    }
 
-    <div class="panel" style="margin-top:18px" id="assignments">
+    @if (section == "assignments")
+    {
+    <div class="panel" id="assignments">
         <h3>Assignments</h3>
         @if (cfg.Assignments.Count == 0) { <p class="muted">No assignments.</p> }
         else
@@ -147,6 +153,7 @@ else
         <div class="hint" style="margin-top:6px">SID — из claims техника/группы. Домен-админы и супер-админы (@string.Join(", ", SuperNames)) имеют полный доступ без назначений.</div>
         <div class="btnrow"><button class="primary" @onclick="CreateAssignment" disabled="@(string.IsNullOrWhiteSpace(asgSid) || string.IsNullOrEmpty(asgRole) || string.IsNullOrEmpty(asgScope))">Create assignment</button></div>
     </div>
+    }
 }
 
 @code {
@@ -168,11 +175,17 @@ else
     private string subjSearch = "", asgName = "";
     private List<AdSearchResult>? subjResults;
 
+    [SupplyParameterFromQuery(Name = "s")] private string? S { get; set; }
+    private string section = "roles";
+
     protected override async Task OnInitializedAsync()
     {
         cfg = await Store.LoadAsync();
         try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
     }
+
+    protected override void OnParametersSet()
+        => section = S is "roles" or "scopes" or "assignments" ? S : "roles";
 
     private string RoleName(Guid id) => cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? "?";
     private string ScopeName(Guid id) => cfg!.Scopes.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
