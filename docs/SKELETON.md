@@ -53,10 +53,10 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/users/bulk` | массовое создание из CSV. |
 | `/templates`, `/templates/edit` | **Form templates**: список (edit/copy/delete) + Layout-редактор (Field Tray → вкладки, переименование/добавление/перемещение вкладок, ↑↓ полей). Store — `App_Data/user-templates.json`. |
 | `/search` | Advanced search по атрибутам. |
-| `/groups` | Group Management: **грид** (поиск/пагинация/bulk move/delete, Manage ▸) + create/membership/rename/move/delete. |
-| `/computers` | Computer Management: **грид** (поиск, Disabled only, bulk enable/disable/reset/move/delete) + create/rename/move/delete. |
-| `/ous` | OU Management: create/rename/move/delete. |
-| `/contacts` | Contact Management: **грид** (поиск, bulk delete) + create/delete. |
+| `/groups`, `/groups/create` | Group Management: грид (Modify) + отдельная страница создания; membership/rename/move/delete. |
+| `/computers`, `/computers/create` | Computer Management: грид (Modify) + создание; enable/disable/reset/rename/move/delete. |
+| `/ous`, `/ous/create` | OU Management: список (Modify) + создание; rename/move/delete. |
+| `/contacts`, `/contacts/create` | Contact Management: грид (Modify) + создание; bulk/ per-row delete. |
 | `/exchange` | **грид** пользователей (Mailbox ▸, bulk enable/disable mailbox) + mailbox props + distribution groups. |
 | `/gpo` | Group Policy: список GPO (версия/статус/линки) + управление линками по scope (link/unlink/enforce/enable). |
 | `/delegation` | Roles / Scopes / Assignments (реальный RBAC). |

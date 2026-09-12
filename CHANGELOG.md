@@ -5,6 +5,7 @@
 ## 2026-09-12 — UI-редизайн раздела Users + редактор шаблонов формы
 
 ### Добавлено
+- **Единая структура меню для всех разделов объектов**: как в Users, теперь у Groups/Computers/OU/Contacts — отдельные пункты «Modify …» (грид+управление) и «Create …» (отдельная страница). Формы создания вынесены на `/groups/create`, `/computers/create`, `/ous/create`, `/contacts/create`. Пункт «Users» переименован в «Modify users».
 - **Country / Home folder / Other… multi-valued** (batch 4, завершает матрицу ADUC): единый селектор Country/region (пишет c/co/countryCode связанно, `Countries`); Home folder с ADUC-логикой Local/Connect(drive+UNC); списковые редакторы «Other…» (otherTelephone/otherHomePhone/otherPager/otherMobile/otherFax/otherIpPhone/url) на общем multi-value движке (`IAdDirectory.GetMultiValueAsync` / `AdService.SetMultiValueAsync`). Все — в каталоге шаблонов. Round-trip проверен на живом AD.
 - **Logon Hours** (batch 3): редактор-сетка 7×24 (`logonHours`, 21 байт, UTC) на вкладке Account — allow/deny по часам, Allow all/Deny all/Save/Clear. `IAdDirectory.GetLogonHoursAsync` + `AdService.SetLogonHoursAsync`; поле `__logonHours` в каталоге шаблонов. Round-trip проверен на живом AD (UTC; ADUC показывает со сдвигом в локальное время).
 - **Member Of на карточке пользователя** (batch 2): вкладка со списком групп (`memberOf`, читаемые имена), add/remove через group.member, **Set Primary Group** (`primaryGroupID` по RID). Новый read `IAdDirectory.ListUserGroupsAsync`, `AdService.SetPrimaryGroupAsync`; категория «Member Of» в каталоге шаблонов.
