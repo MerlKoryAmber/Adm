@@ -103,6 +103,31 @@ else
             <label>Prohibit send quota (MB)</label><input type="text" @bind="sendMb" />
             <div class="checkbox"><input type="checkbox" id="hid" @bind="hidden" /><label for="hid">Hidden from address lists</label></div>
             <div class="btnrow"><button class="primary" @onclick="SetProps">Set properties</button></div>
+
+            <hr />
+            <h3>Permissions</h3>
+            <div class="hint">Grant or revoke Full Access, Send As or Send on Behalf on this mailbox for another user.</div>
+            <label>Trustee</label>
+            <select @bind="trustee">
+                <option value="">— select a user —</option>
+                @foreach (var u in users ?? Enumerable.Empty<AdUserSummary>())
+                {
+                    <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
+                }
+            </select>
+            <div class="hint">The user who receives (or loses) the permission.</div>
+            <div class="btnrow">
+                <button @onclick="AddFullAccess" disabled="@NoTrustee">Add Full Access</button>
+                <button class="danger" @onclick="RemoveFullAccess" disabled="@NoTrustee">Remove Full Access</button>
+            </div>
+            <div class="btnrow">
+                <button @onclick="AddSendAs" disabled="@NoTrustee">Add Send As</button>
+                <button class="danger" @onclick="RemoveSendAs" disabled="@NoTrustee">Remove Send As</button>
+            </div>
+            <div class="btnrow">
+                <button @onclick="AddSendOnBehalf" disabled="@NoTrustee">Add Send on Behalf</button>
+                <button class="danger" @onclick="RemoveSendOnBehalf" disabled="@NoTrustee">Remove Send on Behalf</button>
+            </div>
         }
     </div>
 
@@ -147,7 +172,8 @@ else
     private readonly HashSet<string> selected = new();
     private string search = "", ouDn = "", alias = "", warnMb = "", sendMb = "";
     private bool hidden;
-    private string dgName = "", dgOu = "", dgIdentity = "", dgMember = "";
+    private string dgName = "", dgOu = "", dgIdentity = "", dgMember = "", trustee = "";
+    private bool NoTrustee => sel is null || string.IsNullOrEmpty(trustee);
     private int page;
     private string? banner; private bool ok;
 
@@ -219,6 +245,13 @@ else
         var props = new MailboxProperties(string.IsNullOrWhiteSpace(alias) ? null : alias, warn, send, hidden);
         Show(await Ex.SetMailboxPropertiesAsync(await Actor(), sel!.Dn, props));
     }
+
+    private async Task AddFullAccess() => Show(await Ex.AddMailboxPermissionAsync(await Actor(), sel!.Dn, trustee));
+    private async Task RemoveFullAccess() => Show(await Ex.RemoveMailboxPermissionAsync(await Actor(), sel!.Dn, trustee));
+    private async Task AddSendAs() => Show(await Ex.AddSendAsAsync(await Actor(), sel!.Dn, trustee));
+    private async Task RemoveSendAs() => Show(await Ex.RemoveSendAsAsync(await Actor(), sel!.Dn, trustee));
+    private async Task AddSendOnBehalf() => Show(await Ex.SetSendOnBehalfAsync(await Actor(), sel!.Dn, trustee, add: true));
+    private async Task RemoveSendOnBehalf() => Show(await Ex.SetSendOnBehalfAsync(await Actor(), sel!.Dn, trustee, add: false));
 
     private async Task CreateDg() { Show(await Ex.CreateDistributionGroupAsync(await Actor(), dgName.Trim(), dgOu)); }
     private async Task AddMember() { Show(await Ex.ManageDistributionMembersAsync(await Actor(), dgIdentity.Trim(), new[] { dgMember }, Array.Empty<string>())); }

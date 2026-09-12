@@ -38,6 +38,7 @@ public enum Permission
     DisableMailbox,
     SetMailboxProperties,
     ManageDistribution,
+    ManageMailboxPermissions,
 
     // Group Policy
     ManageGpoLinks,
