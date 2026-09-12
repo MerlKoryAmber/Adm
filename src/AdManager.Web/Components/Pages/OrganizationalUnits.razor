@@ -2,6 +2,7 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject UiOptions Ui
+@inject NavigationManager Nav
 
 <PageTitle>OU Management — admanager</PageTitle>
 <h1>OU Management</h1>
@@ -14,7 +15,7 @@
 
 <div class="layout2">
     <div class="panel">
-        <div class="panelhead"><h3>Organizational Units</h3><button @onclick="Load">Refresh</button></div>
+        <div class="panelhead"><h3>Organizational Units</h3><span class="grow"></span><button @onclick='() => Nav.NavigateTo("ous/create")'>+ Create</button><button @onclick="Load">Refresh</button></div>
         @if (ous is null) { <p>Loading…</p> }
         else
         {
@@ -32,20 +33,6 @@
             </table>
             <p class="hint">@ous.Count OU(s)</p>
         }
-
-        <hr />
-        <h3>Create OU</h3>
-        <label>Parent</label>
-        <select @bind="parentDn">
-            <option value="@Ui.BaseDn">(domain root)</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
-        <label>Name</label>
-        <input type="text" @bind="newName" placeholder="Sales" />
-        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create OU</button></div>
     </div>
 
     <div class="panel">
@@ -85,10 +72,10 @@
 
     private List<AdOuNode>? ous;
     private AdOuNode? sel;
-    private string parentDn = "", newName = "", renameTo = "", moveTo = "";
+    private string renameTo = "", moveTo = "";
     private string? banner; private bool ok; private bool confirmDelete;
 
-    protected override async Task OnInitializedAsync() { parentDn = Ui.BaseDn; await Load(); }
+    protected override async Task OnInitializedAsync() { await Load(); }
 
     private async Task Load()
     {
@@ -107,7 +94,6 @@
     private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"OU={renameTo}")); await Load(); }
     private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
     private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
-    private async Task Create() { Show(await Mgmt.CreateOuAsync(await Actor(), new CreateOuRequest(parentDn, newName.Trim()))); newName = ""; await Load(); }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);

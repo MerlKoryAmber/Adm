@@ -1,0 +1,68 @@
+@page "/ous/create"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Create OU — admanager</PageTitle>
+<h1>Create OU</h1>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:660px">
+    <label>Parent</label>
+    <select @bind="parentDn">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+    <div class="hint">Parent OU or the domain root the new OU is created under.</div>
+
+    <label>Name</label>
+    <input type="text" @bind="newName" placeholder="Sales" />
+    <div class="hint">Name of the organizational unit.</div>
+
+    <div class="btnrow" style="margin-top:16px">
+        <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create OU</button>
+        <button @onclick='() => Nav.NavigateTo("ous")'>Back to OUs</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private string parentDn = "", newName = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        parentDn = Ui.BaseDn;
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task Create()
+    {
+        var r = await Mgmt.CreateOuAsync(await Actor(), new CreateOuRequest(parentDn, newName.Trim()));
+        ok = r.Success;
+        banner = r.Success ? $"OU '{newName.Trim()}' created." : ("Error: " + r.Message);
+        if (r.Success)
+        {
+            newName = "";
+            ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        }
+    }
+
+    private static string Indent(int d) => new string(' ', d * 3);
+}

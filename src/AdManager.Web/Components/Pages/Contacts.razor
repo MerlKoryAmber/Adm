@@ -2,6 +2,7 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject UiOptions Ui
+@inject NavigationManager Nav
 
 <PageTitle>Contact Management — admanager</PageTitle>
 <h1>Contact Management</h1>
@@ -24,6 +25,7 @@
         </select>
     </label>
     <span class="grow"></span>
+    <button @onclick='() => Nav.NavigateTo("contacts/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
 </div>
 
@@ -99,19 +101,6 @@ else
     </div>
 }
 
-<div class="layout2" style="margin-top:16px">
-    <div class="panel">
-        <h3>Create contact</h3>
-        <label>Display name</label>
-        <input type="text" @bind="name" placeholder="John Vendor" />
-        <div class="hint">Shown as the contact CN in the selected OU.</div>
-        <label>Email</label>
-        <input type="text" @bind="mail" placeholder="john@vendor.com" />
-        <div class="hint">External SMTP address for the contact.</div>
-        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(name)">Create contact</button></div>
-    </div>
-</div>
-
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
@@ -119,7 +108,7 @@ else
     private List<AdOuNode>? ous;
     private List<AdContactSummary>? items;
     private readonly HashSet<string> selected = new();
-    private string search = "", ouDn = "", name = "", mail = "";
+    private string search = "", ouDn = "";
     private int page;
     private string? confirmDel;
     private string? banner; private bool ok; private bool confirmBulkDelete;
@@ -170,13 +159,6 @@ else
     {
         var p = AuthState is null ? null : (await AuthState).User;
         return CurrentUser.From(p);
-    }
-
-    private async Task Create()
-    {
-        var attrs = new Dictionary<string, string?> { ["mail"] = mail };
-        Show(await Mgmt.CreateContactAsync(await Actor(), new CreateContactRequest(ouDn, name.Trim(), attrs)));
-        name = ""; mail = ""; await Load();
     }
 
     private async Task Delete(string dn) { Show(await Mgmt.DeleteObjectAsync(await Actor(), dn)); confirmDel = null; await Load(); }
