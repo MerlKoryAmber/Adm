@@ -1,0 +1,69 @@
+@page "/contacts/create"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Create contact — admanager</PageTitle>
+<h1>Create contact</h1>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:660px">
+    <label>Target OU</label>
+    <select @bind="ouDn">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+    <div class="hint">OU the contact is created in.</div>
+
+    <label>Display name</label>
+    <input type="text" @bind="name" placeholder="John Vendor" />
+    <div class="hint">Shown as the contact CN in the selected OU.</div>
+
+    <label>Email</label>
+    <input type="text" @bind="mail" placeholder="john@vendor.com" />
+    <div class="hint">External SMTP address for the contact.</div>
+
+    <div class="btnrow" style="margin-top:16px">
+        <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(name)">Create contact</button>
+        <button @onclick='() => Nav.NavigateTo("contacts")'>Back to contacts</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private string ouDn = "", name = "", mail = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        ouDn = ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn;
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task Create()
+    {
+        var attrs = new Dictionary<string, string?> { ["mail"] = mail };
+        var r = await Mgmt.CreateContactAsync(await Actor(), new CreateContactRequest(ouDn, name.Trim(), attrs));
+        ok = r.Success;
+        banner = r.Success ? $"Contact '{name.Trim()}' created." : ("Error: " + r.Message);
+        if (r.Success) { name = ""; mail = ""; }
+    }
+
+    private static string Indent(int d) => new string(' ', d * 3);
+}
