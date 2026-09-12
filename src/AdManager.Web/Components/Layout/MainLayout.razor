@@ -1,14 +1,16 @@
 @inherits LayoutComponentBase
 @inject UiOptions Ui
+@inject NavigationManager Nav
+@implements IDisposable
 
 <div class="shell">
     <header class="topbar">
         <div class="logo">ADManager<span>·lab</span></div>
         <nav class="tabs">
-            <a class="tab active" href="users">Management</a>
-            <a class="tab" href="reports">Reports</a>
-            <a class="tab" href="delegation">Delegation</a>
-            <a class="tab" href="automation">Automation</a>
+            <a class="tab @(Section == "Management" ? "active" : null)" href="users">Management</a>
+            <a class="tab @(Section == "Reports" ? "active" : null)" href="reports">Reports</a>
+            <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a>
+            <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a>
         </nav>
         <div class="topright">
             <span class="domainchip">Domain: @Ui.Domain</span>
@@ -21,30 +23,55 @@
 
     <div class="body">
         <aside class="tree">
-            <NavLink class="treeitem" href="search">🔍 Advanced search</NavLink>
-            <div class="treegroup">User Management</div>
-            <NavLink class="treeitem" href="users" Match="NavLinkMatch.All">Modify users</NavLink>
-            <NavLink class="treeitem" href="users/create">Create user</NavLink>
-            <NavLink class="treeitem" href="users/bulk">Bulk create (CSV)</NavLink>
-            <NavLink class="treeitem" href="templates">Form templates</NavLink>
-            <div class="treegroup">Group Management</div>
-            <NavLink class="treeitem" href="groups" Match="NavLinkMatch.All">Modify groups</NavLink>
-            <NavLink class="treeitem" href="groups/create">Create group</NavLink>
-            <div class="treegroup">Computer Management</div>
-            <NavLink class="treeitem" href="computers" Match="NavLinkMatch.All">Modify computers</NavLink>
-            <NavLink class="treeitem" href="computers/create">Create computer</NavLink>
-            <div class="treegroup">OU Management</div>
-            <NavLink class="treeitem" href="ous" Match="NavLinkMatch.All">Modify OUs</NavLink>
-            <NavLink class="treeitem" href="ous/create">Create OU</NavLink>
-            <div class="treegroup">Group Policy</div>
-            <NavLink class="treeitem" href="gpo">Group Policy Objects</NavLink>
-            <div class="treegroup">Contact Management</div>
-            <NavLink class="treeitem" href="contacts" Match="NavLinkMatch.All">Modify contacts</NavLink>
-            <NavLink class="treeitem" href="contacts/create">Create contact</NavLink>
-            <div class="treegroup">Exchange</div>
-            <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
-            <div class="treegroup">Logs</div>
-            <NavLink class="treeitem" href="audit">Audit</NavLink>
+            @if (Section == "Management")
+            {
+                <NavLink class="treeitem" href="search">🔍 Advanced search</NavLink>
+                <div class="treegroup">User Management</div>
+                <NavLink class="treeitem" href="users" Match="NavLinkMatch.All">Modify users</NavLink>
+                <NavLink class="treeitem" href="users/create">Create user</NavLink>
+                <NavLink class="treeitem" href="users/bulk">Bulk create (CSV)</NavLink>
+                <NavLink class="treeitem" href="templates">Form templates</NavLink>
+                <div class="treegroup">Group Management</div>
+                <NavLink class="treeitem" href="groups" Match="NavLinkMatch.All">Modify groups</NavLink>
+                <NavLink class="treeitem" href="groups/create">Create group</NavLink>
+                <div class="treegroup">Computer Management</div>
+                <NavLink class="treeitem" href="computers" Match="NavLinkMatch.All">Modify computers</NavLink>
+                <NavLink class="treeitem" href="computers/create">Create computer</NavLink>
+                <div class="treegroup">OU Management</div>
+                <NavLink class="treeitem" href="ous" Match="NavLinkMatch.All">Modify OUs</NavLink>
+                <NavLink class="treeitem" href="ous/create">Create OU</NavLink>
+                <div class="treegroup">Group Policy</div>
+                <NavLink class="treeitem" href="gpo">Group Policy Objects</NavLink>
+                <div class="treegroup">Contact Management</div>
+                <NavLink class="treeitem" href="contacts" Match="NavLinkMatch.All">Modify contacts</NavLink>
+                <NavLink class="treeitem" href="contacts/create">Create contact</NavLink>
+                <div class="treegroup">Exchange</div>
+                <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
+            }
+            else if (Section == "Reports")
+            {
+                <div class="treegroup">Reports</div>
+                <a class="treeitem" href="reports?r=all">All users</a>
+                <a class="treeitem" href="reports?r=disabled">Disabled users</a>
+                <a class="treeitem" href="reports?r=locked">Locked-out users</a>
+                <a class="treeitem" href="reports?r=noemail">Users without email</a>
+                <a class="treeitem" href="reports?r=nomanager">Users without manager</a>
+                <a class="treeitem" href="reports?r=pne">Password never expires</a>
+                <div class="treegroup">Logs</div>
+                <NavLink class="treeitem" href="audit">Audit log</NavLink>
+            }
+            else if (Section == "Delegation")
+            {
+                <div class="treegroup">Delegation</div>
+                <a class="treeitem" href="delegation#roles">Roles</a>
+                <a class="treeitem" href="delegation#scopes">Scopes</a>
+                <a class="treeitem" href="delegation#assignments">Assignments</a>
+            }
+            else if (Section == "Automation")
+            {
+                <div class="treegroup">Automation</div>
+                <NavLink class="treeitem" href="automation" Match="NavLinkMatch.All">Policies</NavLink>
+            }
         </aside>
 
         <main class="content">
@@ -52,3 +79,21 @@
         </main>
     </div>
 </div>
+
+@code {
+    private string Section
+    {
+        get
+        {
+            var p = Nav.ToBaseRelativePath(Nav.Uri).ToLowerInvariant();
+            if (p.StartsWith("reports")) return "Reports";
+            if (p.StartsWith("delegation")) return "Delegation";
+            if (p.StartsWith("automation")) return "Automation";
+            return "Management";
+        }
+    }
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

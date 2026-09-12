@@ -19,7 +19,7 @@
 else
 {
     <div class="layout2">
-        <div class="panel">
+        <div class="panel" id="roles">
             <h3>Roles</h3>
             @if (cfg.Roles.Count == 0) { <p class="muted">No roles.</p> }
             else
@@ -47,7 +47,7 @@ else
             <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || rolePerms.Count == 0)">Create role</button></div>
         </div>
 
-        <div class="panel">
+        <div class="panel" id="scopes">
             <h3>Scopes</h3>
             @if (cfg.Scopes.Count == 0) { <p class="muted">No scopes.</p> }
             else
@@ -78,7 +78,7 @@ else
         </div>
     </div>
 
-    <div class="panel" style="margin-top:18px">
+    <div class="panel" style="margin-top:18px" id="assignments">
         <h3>Assignments</h3>
         @if (cfg.Assignments.Count == 0) { <p class="muted">No assignments.</p> }
         else
@@ -89,7 +89,7 @@ else
                     @foreach (var a in cfg.Assignments)
                     {
                         <tr>
-                            <td style="word-break:break-all">@a.SubjectSid</td>
+                            <td>@(string.IsNullOrEmpty(a.SubjectName) ? a.SubjectSid : a.SubjectName)<div class="hint" style="word-break:break-all">@a.SubjectSid</div></td>
                             <td>@a.SubjectType</td>
                             <td>@RoleName(a.RoleId)</td>
                             <td>@ScopeName(a.ScopeId)</td>
@@ -102,16 +102,32 @@ else
         <hr />
         <h3>New assignment</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
-            <div>
-                <label>Subject type</label>
-                <select @bind="asgType">
-                    <option value="Technician">Technician (user SID)</option>
-                    <option value="AdGroup">AD group (group SID)</option>
-                </select>
-            </div>
-            <div>
-                <label>Subject SID</label>
-                <input type="text" @bind="asgSid" placeholder="S-1-5-21-…" />
+            <div style="grid-column:1 / -1">
+                <label>Subject (user or group)</label>
+                @if (!string.IsNullOrEmpty(asgName))
+                {
+                    <div class="toolbar" style="margin:4px 0">
+                        <span class="grow">@asgName <span class="fkey">@asgType · @asgSid</span></span>
+                        <button class="linkbtn danger" @onclick="ClearSubject">Clear</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="toolbar" style="margin:4px 0">
+                        <input class="grow" type="text" placeholder="find user or group by name…" @bind="subjSearch" @bind:event="oninput" />
+                        <button @onclick="FindSubject" disabled="@string.IsNullOrWhiteSpace(subjSearch)">Find</button>
+                    </div>
+                    @if (subjResults is { Count: > 0 })
+                    {
+                        <div class="fieldlist">
+                            @foreach (var s in subjResults)
+                            {
+                                var ss = s;
+                                <div class="fieldrow"><span class="fname">@ss.Name</span><span class="fkey">@ss.ObjectClass</span><span class="grow"></span><button class="linkbtn" @onclick="() => PickSubject(ss)">Select</button></div>
+                            }
+                        </div>
+                    }
+                }
             </div>
             <div>
                 <label>Role</label>
@@ -149,6 +165,8 @@ else
     private bool scopeSubtree = true;
 
     private string asgType = "Technician", asgSid = "", asgRole = "", asgScope = "";
+    private string subjSearch = "", asgName = "";
+    private List<AdSearchResult>? subjResults;
 
     protected override async Task OnInitializedAsync()
     {
@@ -176,16 +194,38 @@ else
     }
     private async Task DeleteScope(Guid id) { cfg!.Scopes.RemoveAll(s => s.Id == id); await Save("Scope deleted."); }
 
+    private async Task FindSubject()
+    {
+        subjResults = (await Dir.SearchAsync(Ui.BaseDn, subjSearch.Trim()))
+            .Where(x => ((x.ObjectClass?.Contains("user", StringComparison.OrdinalIgnoreCase) ?? false)
+                         || (x.ObjectClass?.Contains("group", StringComparison.OrdinalIgnoreCase) ?? false))
+                        && !(x.ObjectClass?.Contains("computer", StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(10).ToList();
+    }
+
+    private async Task PickSubject(AdSearchResult s)
+    {
+        var sid = await Dir.GetSidAsync(s.Dn);
+        if (string.IsNullOrEmpty(sid)) { ok = false; banner = "Could not read SID for the selected object."; return; }
+        asgSid = sid;
+        asgName = s.Name;
+        asgType = (s.ObjectClass?.Contains("group", StringComparison.OrdinalIgnoreCase) ?? false) ? "AdGroup" : "Technician";
+        subjResults = null; subjSearch = "";
+    }
+
+    private void ClearSubject() { asgName = ""; asgSid = ""; subjResults = null; }
+
     private async Task CreateAssignment()
     {
         cfg!.Assignments.Add(new RoleAssignment
         {
             SubjectType = Enum.Parse<SubjectType>(asgType),
             SubjectSid = asgSid.Trim(),
+            SubjectName = string.IsNullOrWhiteSpace(asgName) ? null : asgName,
             RoleId = Guid.Parse(asgRole),
             ScopeId = Guid.Parse(asgScope),
         });
-        await Save("Assignment created."); asgSid = ""; asgRole = ""; asgScope = "";
+        await Save("Assignment created."); asgSid = ""; asgName = ""; asgRole = ""; asgScope = "";
     }
     private async Task DeleteAssignment(Guid id) { cfg!.Assignments.RemoveAll(a => a.Id == id); await Save("Assignment deleted."); }
 

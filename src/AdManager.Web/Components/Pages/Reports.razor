@@ -123,7 +123,20 @@
     private string? banner; private bool ok;
     private IJSObjectReference? module;
 
+    [SupplyParameterFromQuery(Name = "r")] private string? R { get; set; }
+
     protected override async Task OnInitializedAsync() => await Load();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(R)) return;
+        var r = Catalog.FirstOrDefault(x => x.Key == R);
+        if (r is not null && r.Key != current.Key)
+        {
+            current = r; page = 0; search = "";
+            if (r.NeedsAttrs && users is not null && !enriched) await EnrichAsync();
+        }
+    }
 
     private async Task Load()
     {

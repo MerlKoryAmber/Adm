@@ -1,4 +1,5 @@
 using System.DirectoryServices;
+using System.Security.Principal;
 using AdManager.Application;
 using AdManager.Application.Abstractions;
 
@@ -162,6 +163,16 @@ public sealed class AdDirectory : IAdDirectory
                 if (!string.IsNullOrEmpty(s)) list.Add(s);
             }
             return list;
+        }, ct);
+
+    public Task<string?> GetSidAsync(string dn, CancellationToken ct = default)
+        => Task.Run<string?>(() =>
+        {
+            using var de = Bind(dn);
+            de.RefreshCache();
+            return de.Properties["objectSid"].Value is byte[] b && b.Length > 0
+                ? new SecurityIdentifier(b, 0).Value
+                : null;
         }, ct);
 
     public Task<byte[]?> GetLogonHoursAsync(string userDn, CancellationToken ct = default)

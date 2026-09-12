@@ -43,6 +43,9 @@ public interface IAdDirectory
 
     /// <summary>Все значения многозначного атрибута (напр. otherTelephone, url, proxyAddresses).</summary>
     Task<IReadOnlyList<string>> GetMultiValueAsync(string dn, string attribute, CancellationToken ct = default);
+
+    /// <summary>objectSid объекта в виде строки S-1-5-… (для назначений RBAC по имени).</summary>
+    Task<string?> GetSidAsync(string dn, CancellationToken ct = default);
     Task<IReadOnlyList<AdComputerSummary>> ListComputersAsync(string ouDn, bool subtree, CancellationToken ct = default);
     Task<IReadOnlyList<AdContactSummary>> ListContactsAsync(string ouDn, bool subtree, CancellationToken ct = default);
 

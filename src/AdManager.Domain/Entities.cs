@@ -34,8 +34,10 @@ public sealed class RoleAssignment
     public Guid Id { get; init; } = Guid.NewGuid();
     public required SubjectType SubjectType { get; init; }
 
-    /// <summary>SID техника или AD-группы.</summary>
+    /// <summary>SID техника или AD-группы (стабильный ключ для сверки с токеном).</summary>
     public required string SubjectSid { get; init; }
+    /// <summary>Читаемое имя субъекта (для UI; на авторизацию не влияет).</summary>
+    public string? SubjectName { get; init; }
     public required Guid RoleId { get; init; }
     public required Guid ScopeId { get; init; }
 }
