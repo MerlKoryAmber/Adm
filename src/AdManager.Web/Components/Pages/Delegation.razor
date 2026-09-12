@@ -28,7 +28,7 @@ else
                 <table><tbody>
                     @foreach (var r in cfg.Roles)
                     {
-                        <tr><td><b>@r.Name</b><div class="hint">@string.Join(", ", r.Permissions)</div>
+                        <tr><td><b>@r.Name</b><div class="hint">@string.Join(", ", r.Permissions.Select(PermissionLabel))</div>
                             @if (r.Permissions.Contains(Permission.CreateUser) && r.CreateUserFields.Count > 0)
                             { <div class="hint">Create fields: @string.Join(", ", r.CreateUserFields.Select(FieldCatalog.Label))</div> }
                             @if (r.Permissions.Contains(Permission.ModifyAttributes) && r.ModifyUserFields.Count > 0)
@@ -42,12 +42,18 @@ else
             <h3>New role</h3>
             <label>Name</label><input type="text" @bind="roleName" placeholder="Help Desk L1" />
             <label>Permissions</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:4px">
-                @foreach (var p in AllPerms)
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:4px">
+                @foreach (var (group, perms) in PermissionGroups)
                 {
-                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
-                        <input type="checkbox" checked="@rolePerms.Contains(p)" @onchange="e => TogglePerm(p, e)" /> @p
-                    </label>
+                    <div>
+                        <div class="treegroup" style="margin:2px 0">@group</div>
+                        @foreach (var p in perms)
+                        {
+                            <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
+                                <input type="checkbox" checked="@rolePerms.Contains(p)" @onchange="e => TogglePerm(p, e)" /> @PermissionLabel(p)
+                            </label>
+                        }
+                    </div>
                 }
             </div>
             @if (rolePerms.Contains(Permission.CreateUser))
@@ -174,8 +180,62 @@ else
     private List<AdOuNode>? ous;
     private string? banner; private bool ok;
 
-    private static readonly Permission[] AllPerms = Enum.GetValues<Permission>();
     private static readonly string[] SuperNames = { "merl", "Domain Admins" };
+
+    // Человекочитаемые подписи операций (enum-имена без пробелов не показываем).
+    private static readonly Dictionary<Permission, string> PermLabels = new()
+    {
+        [Permission.ResetPassword] = "Reset password",
+        [Permission.UnlockAccount] = "Unlock account",
+        [Permission.EnableDisableUser] = "Enable / disable user",
+        [Permission.CreateUser] = "Create user",
+        [Permission.DeleteUser] = "Delete user",
+        [Permission.ModifyAttributes] = "Modify attributes",
+        [Permission.MoveObject] = "Move object",
+        [Permission.ManageGroupMembership] = "Manage group membership",
+        [Permission.Rename] = "Rename",
+        [Permission.SetAccountOptions] = "Set account options",
+        [Permission.CreateGroup] = "Create group",
+        [Permission.CreateComputer] = "Create computer",
+        [Permission.ManageComputer] = "Manage computer",
+        [Permission.CreateOu] = "Create OU",
+        [Permission.ManageOu] = "Manage OU",
+        [Permission.CreateContact] = "Create contact",
+        [Permission.ManageContact] = "Manage contact",
+        [Permission.DeleteObject] = "Delete object",
+        [Permission.EnableMailbox] = "Enable mailbox",
+        [Permission.DisableMailbox] = "Disable mailbox",
+        [Permission.SetMailboxProperties] = "Set mailbox properties",
+        [Permission.ManageDistribution] = "Manage distribution groups",
+        [Permission.ManageMailboxPermissions] = "Manage mailbox permissions",
+        [Permission.ManageGpoLinks] = "Manage GPO links",
+    };
+
+    private static string PermissionLabel(Permission p) => PermLabels.GetValueOrDefault(p, p.ToString());
+
+    // Группировка операций по функционалу; внутри группы — по алфавиту подписи.
+    private static readonly (string Group, Permission[] Perms)[] PermissionGroups = BuildGroups();
+
+    private static (string, Permission[])[] BuildGroups()
+    {
+        var groups = new (string Group, Permission[] Perms)[]
+        {
+            ("Users", new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser,
+                Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject,
+                Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }),
+            ("Groups", new[] { Permission.CreateGroup }),
+            ("Computers", new[] { Permission.CreateComputer, Permission.ManageComputer }),
+            ("Organizational Units", new[] { Permission.CreateOu, Permission.ManageOu }),
+            ("Contacts", new[] { Permission.CreateContact, Permission.ManageContact }),
+            ("Objects", new[] { Permission.DeleteObject }),
+            ("Exchange", new[] { Permission.EnableMailbox, Permission.DisableMailbox, Permission.SetMailboxProperties,
+                Permission.ManageDistribution, Permission.ManageMailboxPermissions }),
+            ("Group Policy", new[] { Permission.ManageGpoLinks }),
+        };
+        return groups
+            .Select(g => (g.Group, g.Perms.OrderBy(PermissionLabel, StringComparer.OrdinalIgnoreCase).ToArray()))
+            .ToArray();
+    }
 
     private string roleName = "";
     private readonly HashSet<Permission> rolePerms = new();
