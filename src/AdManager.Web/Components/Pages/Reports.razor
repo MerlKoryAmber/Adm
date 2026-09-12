@@ -15,18 +15,7 @@
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-<div class="body-split" style="display:flex; gap:16px; align-items:flex-start">
-
-    <aside class="reportlist" style="flex:0 0 240px; display:flex; flex-direction:column; gap:6px">
-        @foreach (var r in Catalog)
-        {
-            <button class="linkbtn @(r.Key == current.Key ? "badge ok" : "")"
-                    style="text-align:left; padding:8px 10px; border:1px solid var(--border,#2a2a2a); border-radius:6px; @(r.Key == current.Key ? "font-weight:600" : "")"
-                    @onclick="() => Select(r)">@r.Title</button>
-        }
-    </aside>
-
-    <section style="flex:1 1 auto; min-width:0">
+<section>
         <div class="toolbar">
             <strong>@current.Title</strong>
             <span class="grow"></span>
@@ -94,8 +83,7 @@
                 <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
             </div>
         }
-    </section>
-</div>
+</section>
 
 @code {
     private const int PageSize = 50;
@@ -147,12 +135,6 @@
             if (current.NeedsAttrs) await EnrichAsync();
         }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
-    }
-
-    private async Task Select(ReportDef r)
-    {
-        current = r; page = 0; search = "";
-        if (r.NeedsAttrs && users is not null && !enriched) await EnrichAsync();
     }
 
     // Дозагрузка per-account атрибутов (manager, userAccountControl) одним проходом.
