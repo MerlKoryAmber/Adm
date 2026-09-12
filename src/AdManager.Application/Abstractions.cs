@@ -93,6 +93,7 @@ public interface IAdService
     // Расширенные операции (ADManager-набор)
     Task<OperationResult> RenameAsync(string dn, string newRdn, CancellationToken ct = default);
     Task<OperationResult> SetAccountOptionsAsync(string userDn, AccountOptions options, CancellationToken ct = default);
+    Task<OperationResult> SetPrimaryGroupAsync(string userDn, string groupDn, CancellationToken ct = default);
     Task<OperationResult> CreateGroupAsync(CreateGroupRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateComputerAsync(CreateComputerRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateContactAsync(CreateContactRequest request, CancellationToken ct = default);

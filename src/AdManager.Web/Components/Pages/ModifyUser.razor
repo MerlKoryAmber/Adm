@@ -2,11 +2,12 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject IUserTemplateStore Templates
+@inject UiOptions Ui
 @inject NavigationManager Nav
 
 <PageTitle>Modify user — admanager</PageTitle>
 <h1>Modify user</h1>
-<p class="subtitle">@Dn</p>
+<p class="subtitle">@(model is null ? "" : $"{model.GetValueOrDefault("displayName")} ({sam}) — {Rdn(ParentOf(Dn))}")</p>
 
 @if (banner is not null)
 {
@@ -74,12 +75,73 @@ else
                 <div class="checkbox"><input type="checkbox" checked="@uacFlags.GetValueOrDefault(k)" @onchange="e => ToggleUac(k, (bool)(e.Value ?? false))" /><label>@FieldCatalog.Label(k)</label></div>
                 @if (k == "__cannotChangePwd") { <div class="hint">Written as UAC bit 0x40; in AD "cannot change password" is enforced via ACL, so effect is limited (ACL variant is a separate step).</div> }
             }
+            else if (key == "manager")
+            {
+                <label>Manager</label>
+                <div class="toolbar" style="margin:4px 0">
+                    <span class="grow">@(string.IsNullOrEmpty(managerDisplay) ? "— none —" : managerDisplay)</span>
+                    @if (!string.IsNullOrEmpty(managerDisplay)) { <button class="linkbtn danger" @onclick="ClearManager">Clear</button> }
+                </div>
+                <div class="toolbar" style="margin:4px 0">
+                    <input class="grow" type="text" placeholder="find user by name…" @bind="managerSearch" @bind:event="oninput" />
+                    <button @onclick="FindManager" disabled="@(string.IsNullOrWhiteSpace(managerSearch))">Find</button>
+                </div>
+                @if (managerResults is { Count: > 0 })
+                {
+                    <div class="fieldlist">
+                        @foreach (var m in managerResults)
+                        {
+                            var mm = m;
+                            <div class="fieldrow"><span class="fname">@mm.Name</span><span class="fkey">@mm.SamAccountName</span><span class="grow"></span><button class="linkbtn" @onclick="() => PickManager(mm)">Select</button></div>
+                        }
+                    </div>
+                }
+            }
+            else if (key == "__memberOf")
+            {
+                <label>Member of</label>
+                @if (userGroups is { Count: > 0 })
+                {
+                    <div class="fieldlist">
+                        @foreach (var g in userGroups)
+                        {
+                            var gg = g;
+                            <div class="fieldrow"><span class="fname">@gg.Name</span><span class="grow"></span><button class="linkbtn danger" @onclick="() => RemoveFromGroup(gg.Dn)">Remove</button></div>
+                        }
+                    </div>
+                }
+                else { <div class="hint">Not a member of any group (besides primary).</div> }
+                <div class="toolbar" style="margin:6px 0">
+                    <select class="grow" @bind="addGroupDn">
+                        <option value="">— add to group —</option>
+                        @foreach (var g in allGroups ?? Enumerable.Empty<AdGroupSummary>())
+                        {
+                            <option value="@g.Dn">@g.Name</option>
+                        }
+                    </select>
+                    <button @onclick="AddToGroup" disabled="@string.IsNullOrEmpty(addGroupDn)">Add</button>
+                </div>
+            }
+            else if (key == "__primaryGroup")
+            {
+                <label>Primary group</label>
+                <div class="toolbar" style="margin:4px 0">
+                    <select class="grow" @bind="primaryGroupSel">
+                        <option value="">— select a group the user belongs to —</option>
+                        @foreach (var g in userGroups ?? Enumerable.Empty<AdGroupSummary>())
+                        {
+                            <option value="@g.Dn">@g.Name</option>
+                        }
+                    </select>
+                    <button @onclick="SetPrimary" disabled="@string.IsNullOrEmpty(primaryGroupSel)">Set primary</button>
+                </div>
+                <div class="hint">User must already be a member of the chosen group.</div>
+            }
             else
             {
                 <label>@FieldCatalog.Label(key)@(req)</label>
                 <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()" />
                 @if (key == "userPrincipalName") { <div class="hint">Empty UPN is not cleared.</div> }
-                else if (key == "manager") { <div class="hint">Full DN, e.g. <code>CN=Boss,OU=…,DC=Merl,DC=loc</code>.</div> }
             }
         }
 
@@ -116,6 +178,11 @@ else
     private string sam = "", resetPwd = "";
     private bool pne, enabled;
     private readonly Dictionary<string, bool> uacFlags = new(); // __cannotChangePwd/__reversibleEncryption/... из userAccountControl
+    private List<AdGroupSummary>? userGroups;   // memberOf (читаемые имена)
+    private List<AdGroupSummary>? allGroups;    // для добавления в группу
+    private string addGroupDn = "", primaryGroupSel = "";
+    private string managerSearch = "", managerDisplay = "";
+    private List<AdSearchResult>? managerResults;
     private DateTime? expiry;
     private string? banner; private bool ok;
 
@@ -144,6 +211,9 @@ else
             uacFlags["__desOnly"] = (uac & 0x200000) != 0;
             uacFlags["__noPreauth"] = (uac & 0x400000) != 0;
             templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
+            userGroups = (await Dir.ListUserGroupsAsync(Dn)).ToList();
+            allGroups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList();
+            managerDisplay = Rdn(model.GetValueOrDefault("manager"));
         }
         catch (Exception ex) { ok = false; banner = "Error loading user: " + ex.Message; }
     }
@@ -212,6 +282,52 @@ else
             _ => new AccountOptions(),
         };
         Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, o));
+    }
+
+    private async Task ReloadGroups() => userGroups = (await Dir.ListUserGroupsAsync(Dn!)).ToList();
+
+    private async Task AddToGroup()
+    {
+        var g = addGroupDn; addGroupDn = "";
+        Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), g, new[] { Dn! }, Array.Empty<string>()));
+        await ReloadGroups();
+    }
+
+    private async Task RemoveFromGroup(string groupDn)
+    {
+        Show(await Mgmt.ManageGroupMembershipAsync(await Actor(), groupDn, Array.Empty<string>(), new[] { Dn! }));
+        await ReloadGroups();
+    }
+
+    private async Task SetPrimary()
+    {
+        Show(await Mgmt.SetPrimaryGroupAsync(await Actor(), Dn!, primaryGroupSel));
+    }
+
+    private async Task FindManager()
+    {
+        managerResults = (await Dir.SearchAsync(Ui.BaseDn, managerSearch.Trim()))
+            .Where(x => (x.ObjectClass?.Contains("user", StringComparison.OrdinalIgnoreCase) ?? false)
+                        && !(x.ObjectClass?.Contains("computer", StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(10).ToList();
+    }
+
+    private void PickManager(AdSearchResult m) { model!["manager"] = m.Dn; managerDisplay = m.Name; managerResults = null; managerSearch = ""; }
+    private void ClearManager() { model!["manager"] = ""; managerDisplay = ""; }
+
+    private static string Rdn(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var eq = dn.IndexOf('='); if (eq < 0) return dn;
+        var comma = dn.IndexOf(',', eq);
+        var val = comma < 0 ? dn[(eq + 1)..] : dn[(eq + 1)..comma];
+        return val.Replace("\\,", ",").Replace("\\", "");
+    }
+
+    private static string ParentOf(string? dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var comma = dn.IndexOf(','); return comma < 0 ? "" : dn[(comma + 1)..];
     }
     private async Task ResetPassword()
     {

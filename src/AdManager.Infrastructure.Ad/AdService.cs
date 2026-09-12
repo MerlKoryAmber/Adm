@@ -179,6 +179,20 @@ public sealed class AdService : IAdService
             return OperationResult.Ok();
         }, ct);
 
+    public Task<OperationResult> SetPrimaryGroupAsync(string userDn, string groupDn, CancellationToken ct = default)
+        => Do(() =>
+        {
+            using var group = Bind(groupDn);
+            group.RefreshCache();
+            if (group.Properties["objectSid"].Value is not byte[] sid || sid.Length < 4)
+                return OperationResult.Fail("Cannot read group SID.");
+            var rid = BitConverter.ToInt32(sid, sid.Length - 4); // RID = последний sub-authority (little-endian)
+            using var user = Bind(userDn);
+            user.Properties["primaryGroupID"].Value = rid; // требует, чтобы пользователь уже был членом группы
+            user.CommitChanges();
+            return OperationResult.Ok();
+        }, ct);
+
     public Task<OperationResult> CreateGroupAsync(CreateGroupRequest request, CancellationToken ct = default)
         => Do(() =>
         {

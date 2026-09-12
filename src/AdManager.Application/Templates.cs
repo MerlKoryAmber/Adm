@@ -64,6 +64,9 @@ public static class FieldCatalog
         new("homeDirectory", "Home folder", "Profile"),
         new("homeDrive", "Home drive", "Profile"),
         new("userWorkstations", "Log on to (workstations)", "Profile"),
+        // Member Of
+        new("__memberOf", "Group memberships", "Member Of"),
+        new("__primaryGroup", "Primary group", "Member Of"),
     };
 
     public static readonly IReadOnlyList<string> Categories =
@@ -166,6 +169,7 @@ public static class TemplateDefaults
         Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
         Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
         Tab("Organization", "title", "department", "company", "manager"),
+        Tab("Member Of", "__memberOf", "__primaryGroup"),
         Tab("Profile", "profilePath", "scriptPath", "homeDirectory", "homeDrive"),
     };
 }

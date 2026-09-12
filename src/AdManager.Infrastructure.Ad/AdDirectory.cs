@@ -135,6 +135,31 @@ public sealed class AdDirectory : IAdDirectory
             return list.OrderBy(u => u.DisplayName).ToList();
         }, ct);
 
+    public Task<IReadOnlyList<AdGroupSummary>> ListUserGroupsAsync(string userDn, CancellationToken ct = default)
+        => Task.Run<IReadOnlyList<AdGroupSummary>>(() =>
+        {
+            using var de = Bind(userDn);
+            de.RefreshCache();
+            var list = new List<AdGroupSummary>();
+            foreach (var m in de.Properties["memberOf"])
+            {
+                var groupDn = m?.ToString();
+                if (string.IsNullOrEmpty(groupDn)) continue;
+                list.Add(new AdGroupSummary(groupDn, "", Rdn(groupDn))); // Name = CN (читаемо, без лишних биндов)
+            }
+            return list.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }, ct);
+
+    /// <summary>Первый RDN-значение из DN (CN=... -> ...), для читаемого отображения.</summary>
+    private static string Rdn(string dn)
+    {
+        var eq = dn.IndexOf('=');
+        if (eq < 0) return dn;
+        var comma = dn.IndexOf(',', eq);
+        var val = comma < 0 ? dn[(eq + 1)..] : dn[(eq + 1)..comma];
+        return val.Replace("\\,", ",").Replace("\\", "");
+    }
+
     public Task<IReadOnlyList<AdComputerSummary>> ListComputersAsync(string ouDn, bool subtree, CancellationToken ct = default)
         => Task.Run<IReadOnlyList<AdComputerSummary>>(() =>
         {

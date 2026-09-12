@@ -34,6 +34,9 @@ public interface IAdDirectory
     Task<IReadOnlyList<AdOuSummary>> ListOusAsync(string parentDn, CancellationToken ct = default);
     Task<AdObjectDetails?> GetObjectAsync(string dn, IEnumerable<string> attributes, CancellationToken ct = default);
     Task<IReadOnlyList<AdUserSummary>> ListGroupMembersAsync(string groupDn, CancellationToken ct = default);
+
+    /// <summary>Группы пользователя (memberOf, многозначный). Name — читаемое имя (CN).</summary>
+    Task<IReadOnlyList<AdGroupSummary>> ListUserGroupsAsync(string userDn, CancellationToken ct = default);
     Task<IReadOnlyList<AdComputerSummary>> ListComputersAsync(string ouDn, bool subtree, CancellationToken ct = default);
     Task<IReadOnlyList<AdContactSummary>> ListContactsAsync(string ouDn, bool subtree, CancellationToken ct = default);
 

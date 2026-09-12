@@ -5,6 +5,8 @@
 ## 2026-09-12 — UI-редизайн раздела Users + редактор шаблонов формы
 
 ### Добавлено
+- **Member Of на карточке пользователя** (batch 2): вкладка со списком групп (`memberOf`, читаемые имена), add/remove через group.member, **Set Primary Group** (`primaryGroupID` по RID). Новый read `IAdDirectory.ListUserGroupsAsync`, `AdService.SetPrimaryGroupAsync`; категория «Member Of» в каталоге шаблонов.
+- **Убраны DN из UI карточки пользователя**: менеджер — пикер по имени (поиск), группы — по имени (CN), подзаголовок — displayName/sam + контейнер. DN больше не показываются/не вводятся вручную.
 - **Account (UAC-флаги ADUC)** на карточке пользователя: reversible encryption, smart card required, sensitive/not-delegated, DES-only, no-preauth, cannot-change-password — чекбоксы с чтением из `userAccountControl` и записью через `SetAccountOptions` (`AccountOptions` расширен). Прим.: cannot-change-password пишется UAC-битом 0x40 (в AD реально — ACL; ACL-вариант отдельным шагом). Первый батч закрытия матрицы атрибутов ADUC (см. `docs/architecture-map.md`).
 - **Group Policy — новый пиллар** (`/gpo`): чтение GPO (groupPolicyContainer: имя, версия, статус user/computer settings), управление линками через `gPLink` по scope (домен/OU) — link/unlink/enforce/enable, счётчик линков и отметка Unlinked. Без GPMC, чистый LDAP. Контракты `IGpoDirectory`/`IGpoService`, `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). Редактирование самих настроек GPO — вне объёма. Backlog фич — `docs/feature-backlog.md`.
 - **Reports** — реальные отчёты вместо заглушки (All/Disabled/Locked-out/Without email/Without manager/Password never expires) + фильтр/пагинация + CSV-экспорт (JS-interop, RFC 4180).
