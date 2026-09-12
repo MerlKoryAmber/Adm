@@ -17,6 +17,9 @@ publish/
 # graphify (граф генерируется локально: graphify update . / хук; конфиг и скилл — в git)
 graphify-out/
 .claude/worktrees/
+# локальные бэкапы установщика graphify
+*.graphify-bak
+*.bak
 
 # Secrets / config
 .env
