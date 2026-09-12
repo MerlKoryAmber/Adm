@@ -75,6 +75,24 @@
         {
             <div class="checkbox"><input type="checkbox" id="pne" @bind="pwdNeverExpires" /><label for="pne">Password never expires</label></div>
         }
+        else if (key == "__country")
+        {
+            <label>Country/region</label>
+            <select value="@(model.GetValueOrDefault("c") ?? "")" @onchange="OnCountry">
+                @foreach (var cty in Countries.All) { <option value="@cty.Iso2">@cty.Name</option> }
+            </select>
+        }
+        else if (key == "__homeFolder")
+        {
+            <label>Home folder (local path or UNC)</label>
+            <input type="text" @bind="createHomeDir" placeholder="C:\Users\jdoe or \\server\share" />
+            <label>Home drive (optional, e.g. Z:)</label>
+            <input type="text" @bind="createHomeDrive" placeholder="Z:" />
+        }
+        else if (key.StartsWith("__", StringComparison.Ordinal))
+        {
+            <div class="hint">"@FieldCatalog.Label(key)" is available on the Modify form (not at creation).</div>
+        }
         else
         {
             <label>@FieldCatalog.Label(key)@(req)</label>
@@ -104,6 +122,7 @@
     private int sel;
     private string ouDn = "", sam = "", password = "";
     private bool enabled = true, mustChange, pwdNeverExpires;
+    private string createHomeDir = "", createHomeDrive = "";
     private string? banner; private bool ok;
 
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
@@ -148,6 +167,15 @@
         ApplyNaming();
     }
 
+    private void OnCountry(ChangeEventArgs e)
+    {
+        var cty = Countries.ByIso2(e.Value?.ToString());
+        var unset = cty is null || cty.Numeric == 0;
+        model["c"] = unset ? "" : cty!.Iso2;
+        model["co"] = unset ? "" : cty!.Name;
+        model["countryCode"] = unset ? "" : cty!.Numeric.ToString();
+    }
+
     private void ApplyNaming()
     {
         var first = model.GetValueOrDefault("givenName");
@@ -188,6 +216,9 @@
         if (string.IsNullOrWhiteSpace(display)) display = sam;
         var upn = model.GetValueOrDefault("userPrincipalName");
         if (string.IsNullOrWhiteSpace(upn)) upn = Upn;
+
+        if (!string.IsNullOrWhiteSpace(createHomeDir)) model["homeDirectory"] = createHomeDir.Trim();
+        if (!string.IsNullOrWhiteSpace(createHomeDrive)) model["homeDrive"] = createHomeDrive.Trim();
 
         var attrs = new Dictionary<string, string?>();
         foreach (var (k, v) in model)

@@ -5,6 +5,7 @@
 ## 2026-09-12 — UI-редизайн раздела Users + редактор шаблонов формы
 
 ### Добавлено
+- **Country / Home folder / Other… multi-valued** (batch 4, завершает матрицу ADUC): единый селектор Country/region (пишет c/co/countryCode связанно, `Countries`); Home folder с ADUC-логикой Local/Connect(drive+UNC); списковые редакторы «Other…» (otherTelephone/otherHomePhone/otherPager/otherMobile/otherFax/otherIpPhone/url) на общем multi-value движке (`IAdDirectory.GetMultiValueAsync` / `AdService.SetMultiValueAsync`). Все — в каталоге шаблонов. Round-trip проверен на живом AD.
 - **Logon Hours** (batch 3): редактор-сетка 7×24 (`logonHours`, 21 байт, UTC) на вкладке Account — allow/deny по часам, Allow all/Deny all/Save/Clear. `IAdDirectory.GetLogonHoursAsync` + `AdService.SetLogonHoursAsync`; поле `__logonHours` в каталоге шаблонов. Round-trip проверен на живом AD (UTC; ADUC показывает со сдвигом в локальное время).
 - **Member Of на карточке пользователя** (batch 2): вкладка со списком групп (`memberOf`, читаемые имена), add/remove через group.member, **Set Primary Group** (`primaryGroupID` по RID). Новый read `IAdDirectory.ListUserGroupsAsync`, `AdService.SetPrimaryGroupAsync`; категория «Member Of» в каталоге шаблонов.
 - **Убраны DN из UI карточки пользователя**: менеджер — пикер по имени (поиск), группы — по имени (CN), подзаголовок — displayName/sam + контейнер. DN больше не показываются/не вводятся вручную.

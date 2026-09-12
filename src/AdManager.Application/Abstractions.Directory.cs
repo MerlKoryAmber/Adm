@@ -40,6 +40,9 @@ public interface IAdDirectory
 
     /// <summary>Маска logonHours (21 байт, 168 бит = 7×24, UTC). null — атрибут не задан (вход разрешён всегда).</summary>
     Task<byte[]?> GetLogonHoursAsync(string userDn, CancellationToken ct = default);
+
+    /// <summary>Все значения многозначного атрибута (напр. otherTelephone, url, proxyAddresses).</summary>
+    Task<IReadOnlyList<string>> GetMultiValueAsync(string dn, string attribute, CancellationToken ct = default);
     Task<IReadOnlyList<AdComputerSummary>> ListComputersAsync(string ouDn, bool subtree, CancellationToken ct = default);
     Task<IReadOnlyList<AdContactSummary>> ListContactsAsync(string ouDn, bool subtree, CancellationToken ct = default);
 

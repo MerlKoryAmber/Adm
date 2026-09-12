@@ -107,6 +107,55 @@ else
                     <button @onclick="ClearLogonHours">Clear (always allowed)</button>
                 </div>
             }
+            else if (key == "__country")
+            {
+                <label>Country/region</label>
+                <select value="@(model.GetValueOrDefault("c") ?? "")" @onchange="OnCountryChange">
+                    @foreach (var cty in Countries.All)
+                    {
+                        <option value="@cty.Iso2">@cty.Name</option>
+                    }
+                </select>
+                <div class="hint">Sets c (ISO2), co (name) and countryCode (numeric) together.</div>
+            }
+            else if (key == "__homeFolder")
+            {
+                <label>Home folder</label>
+                <div class="checkbox"><input type="checkbox" id="hc" @bind="homeConnect" /><label for="hc">Connect a drive (network home)</label></div>
+                @if (homeConnect)
+                {
+                    <div class="toolbar" style="margin:4px 0">
+                        <select @bind="homeDriveSel" style="max-width:90px">
+                            @foreach (var d in Drives) { <option value="@d">@d</option> }
+                        </select>
+                        <input class="grow" @bind="homePath" placeholder="\\\\server\\share\\%username%" />
+                    </div>
+                }
+                else
+                {
+                    <input type="text" @bind="homePath" placeholder="local path, e.g. C:\Users\jdoe" />
+                }
+                <div class="btnrow"><button @onclick="ApplyHomeFolder">Apply home folder</button></div>
+            }
+            else if (OtherAttr(key) is { Length: > 0 })
+            {
+                var k = key;
+                <label>@FieldCatalog.Label(k)</label>
+                @if (otherVals.TryGetValue(k, out var vals) && vals.Count > 0)
+                {
+                    <div class="fieldlist">
+                        @foreach (var val in vals.ToList())
+                        {
+                            var vv = val;
+                            <div class="fieldrow"><span class="fname">@vv</span><span class="grow"></span><button class="linkbtn danger" @onclick="() => RemoveOther(k, vv)">Remove</button></div>
+                        }
+                    </div>
+                }
+                <div class="toolbar" style="margin:4px 0">
+                    <input class="grow" value="@(otherInput.GetValueOrDefault(k) ?? "")" @onchange="e => otherInput[k] = e.Value?.ToString() ?? string.Empty" placeholder="add value…" />
+                    <button @onclick="() => AddOther(k)">Add</button>
+                </div>
+            }
             else if (key == "manager")
             {
                 <label>Manager</label>
@@ -217,6 +266,18 @@ else
     private List<AdSearchResult>? managerResults;
     private readonly bool[,] logonGrid = new bool[7, 24];
     private static readonly string[] Days = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    private bool homeConnect;
+    private string homeDriveSel = "Z:", homePath = "";
+    private static readonly string[] Drives = { "Z:", "Y:", "X:", "W:", "V:", "U:", "T:", "S:", "R:", "Q:", "P:", "O:", "N:", "M:", "L:", "K:", "J:", "I:", "H:", "G:", "F:", "E:", "D:" };
+    private static readonly (string Key, string Attr)[] OtherKeys =
+    {
+        ("__otherTelephone", "otherTelephone"), ("__otherHomePhone", "otherHomePhone"), ("__otherPager", "otherPager"),
+        ("__otherMobile", "otherMobile"), ("__otherFax", "otherFacsimileTelephoneNumber"), ("__otherIpPhone", "otherIpPhone"),
+        ("__otherWeb", "url"),
+    };
+    private static string OtherAttr(string key) => OtherKeys.FirstOrDefault(x => x.Key == key).Attr ?? "";
+    private readonly Dictionary<string, List<string>> otherVals = new();
+    private readonly Dictionary<string, string> otherInput = new();
     private DateTime? expiry;
     private string? banner; private bool ok;
 
@@ -249,6 +310,11 @@ else
             allGroups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList();
             managerDisplay = Rdn(model.GetValueOrDefault("manager"));
             UnpackLogon(await Dir.GetLogonHoursAsync(Dn));
+            homePath = model.GetValueOrDefault("homeDirectory") ?? "";
+            var hd = model.GetValueOrDefault("homeDrive");
+            homeConnect = !string.IsNullOrEmpty(hd);
+            if (homeConnect) homeDriveSel = hd!;
+            foreach (var (k, attr) in OtherKeys) otherVals[k] = (await Dir.GetMultiValueAsync(Dn, attr)).ToList();
         }
         catch (Exception ex) { ok = false; banner = "Error loading user: " + ex.Message; }
     }
@@ -381,6 +447,43 @@ else
     {
         Show(await Mgmt.SetLogonHoursAsync(await Actor(), Dn!, null));
         FillLogon(true);
+    }
+
+    private async Task OnCountryChange(ChangeEventArgs e)
+    {
+        var cty = Countries.ByIso2(e.Value?.ToString());
+        var set = cty is null || cty.Numeric == 0;
+        model!["c"] = set ? "" : cty!.Iso2;
+        model["co"] = set ? "" : cty!.Name;
+        model["countryCode"] = set ? "" : cty!.Numeric.ToString();
+        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, new Dictionary<string, string?>
+        { ["c"] = model["c"], ["co"] = model["co"], ["countryCode"] = model["countryCode"] }, "country"));
+    }
+
+    private async Task ApplyHomeFolder()
+    {
+        var drive = homeConnect ? homeDriveSel : "";
+        model!["homeDirectory"] = homePath;
+        model["homeDrive"] = drive;
+        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, new Dictionary<string, string?>
+        { ["homeDirectory"] = homePath, ["homeDrive"] = drive }, "home folder"));
+    }
+
+    private async Task AddOther(string key)
+    {
+        var v = otherInput.GetValueOrDefault(key);
+        if (string.IsNullOrWhiteSpace(v)) return;
+        var list = otherVals.TryGetValue(key, out var l) ? l : (otherVals[key] = new());
+        list.Add(v.Trim());
+        otherInput[key] = "";
+        Show(await Mgmt.SetMultiValueAsync(await Actor(), Dn!, OtherAttr(key), list));
+    }
+
+    private async Task RemoveOther(string key, string val)
+    {
+        if (!otherVals.TryGetValue(key, out var list)) return;
+        list.Remove(val);
+        Show(await Mgmt.SetMultiValueAsync(await Actor(), Dn!, OtherAttr(key), list));
     }
 
     private static string Rdn(string? dn)

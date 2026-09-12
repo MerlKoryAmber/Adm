@@ -150,6 +150,20 @@ public sealed class AdDirectory : IAdDirectory
             return list.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }, ct);
 
+    public Task<IReadOnlyList<string>> GetMultiValueAsync(string dn, string attribute, CancellationToken ct = default)
+        => Task.Run<IReadOnlyList<string>>(() =>
+        {
+            using var de = Bind(dn);
+            de.RefreshCache();
+            var list = new List<string>();
+            foreach (var v in de.Properties[attribute])
+            {
+                var s = v?.ToString();
+                if (!string.IsNullOrEmpty(s)) list.Add(s);
+            }
+            return list;
+        }, ct);
+
     public Task<byte[]?> GetLogonHoursAsync(string userDn, CancellationToken ct = default)
         => Task.Run<byte[]?>(() =>
         {

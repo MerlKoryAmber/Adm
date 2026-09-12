@@ -193,6 +193,17 @@ public sealed class AdService : IAdService
             return OperationResult.Ok();
         }, ct);
 
+    public Task<OperationResult> SetMultiValueAsync(string dn, string attribute, IReadOnlyList<string> values, CancellationToken ct = default)
+        => Do(() =>
+        {
+            using var de = Bind(dn);
+            de.Properties[attribute].Clear();
+            foreach (var v in values)
+                if (!string.IsNullOrWhiteSpace(v)) de.Properties[attribute].Add(v.Trim());
+            de.CommitChanges();
+            return OperationResult.Ok();
+        }, ct);
+
     public Task<OperationResult> SetLogonHoursAsync(string userDn, byte[]? mask, CancellationToken ct = default)
         => Do(() =>
         {

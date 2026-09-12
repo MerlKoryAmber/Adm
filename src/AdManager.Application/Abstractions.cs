@@ -96,6 +96,8 @@ public interface IAdService
     Task<OperationResult> SetPrimaryGroupAsync(string userDn, string groupDn, CancellationToken ct = default);
     /// <summary>Записать logonHours (21 байт) или очистить (null/пусто = вход разрешён всегда).</summary>
     Task<OperationResult> SetLogonHoursAsync(string userDn, byte[]? mask, CancellationToken ct = default);
+    /// <summary>Заменить все значения многозначного атрибута (пустой список = очистить).</summary>
+    Task<OperationResult> SetMultiValueAsync(string dn, string attribute, IReadOnlyList<string> values, CancellationToken ct = default);
     Task<OperationResult> CreateGroupAsync(CreateGroupRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateComputerAsync(CreateComputerRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateContactAsync(CreateContactRequest request, CancellationToken ct = default);

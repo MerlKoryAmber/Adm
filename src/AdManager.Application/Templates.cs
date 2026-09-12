@@ -18,6 +18,7 @@ public static class FieldCatalog
         new("telephoneNumber", "Telephone", "General"),
         new("mail", "Email", "General"),
         new("wWWHomePage", "Web page", "General"),
+        new("__otherWeb", "Additional web pages", "General"),
         new("employeeID", "Employee ID", "General"),
         // Account
         new("sAMAccountName", "Logon name", "Account"),
@@ -41,6 +42,7 @@ public static class FieldCatalog
         new("postalCode", "Zip/Postal code", "Address"),
         new("co", "Country/Region", "Address"),
         new("c", "Country code (ISO2)", "Address"),
+        new("__country", "Country/region", "Address"),
         // Telephones
         new("homePhone", "Home phone", "Telephones"),
         new("pager", "Pager", "Telephones"),
@@ -48,6 +50,12 @@ public static class FieldCatalog
         new("facsimileTelephoneNumber", "Fax", "Telephones"),
         new("ipPhone", "IP phone", "Telephones"),
         new("info", "Notes", "Telephones"),
+        new("__otherTelephone", "Other telephones", "Telephones"),
+        new("__otherHomePhone", "Other home phones", "Telephones"),
+        new("__otherPager", "Other pagers", "Telephones"),
+        new("__otherMobile", "Other mobiles", "Telephones"),
+        new("__otherFax", "Other faxes", "Telephones"),
+        new("__otherIpPhone", "Other IP phones", "Telephones"),
         // Organization
         new("title", "Title", "Organization"),
         new("department", "Department", "Organization"),
@@ -65,6 +73,7 @@ public static class FieldCatalog
         new("homeDirectory", "Home folder", "Profile"),
         new("homeDrive", "Home drive", "Profile"),
         new("userWorkstations", "Log on to (workstations)", "Profile"),
+        new("__homeFolder", "Home folder", "Profile"),
         // Member Of
         new("__memberOf", "Group memberships", "Member Of"),
         new("__primaryGroup", "Primary group", "Member Of"),
@@ -156,22 +165,23 @@ public static class TemplateDefaults
     {
         Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
         Tab("Account", "sAMAccountName", "userPrincipalName", "__password", "__enabled", "__mustChange"),
-        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
+        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "__country"),
         Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
         Tab("Organization", "title", "department", "company", "manager"),
-        Tab("Profile", "profilePath", "scriptPath", "homeDirectory", "homeDrive"),
+        Tab("Profile", "profilePath", "scriptPath", "__homeFolder"),
     };
 
     public static List<TemplateTab> Modify() => new()
     {
-        Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
+        Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage", "__otherWeb"),
         Tab("Account", "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange",
             "__cannotChangePwd", "__reversibleEncryption", "__smartcardRequired", "__notDelegated", "__desOnly", "__noPreauth", "__logonHours", "__password"),
-        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
-        Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
+        Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "__country"),
+        Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info",
+            "__otherTelephone", "__otherHomePhone", "__otherPager", "__otherMobile", "__otherFax", "__otherIpPhone"),
         Tab("Organization", "title", "department", "company", "manager"),
         Tab("Member Of", "__memberOf", "__primaryGroup"),
-        Tab("Profile", "profilePath", "scriptPath", "homeDirectory", "homeDrive"),
+        Tab("Profile", "profilePath", "scriptPath", "__homeFolder"),
     };
 }
 
