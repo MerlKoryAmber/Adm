@@ -150,6 +150,14 @@ public sealed class AdDirectory : IAdDirectory
             return list.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }, ct);
 
+    public Task<byte[]?> GetLogonHoursAsync(string userDn, CancellationToken ct = default)
+        => Task.Run<byte[]?>(() =>
+        {
+            using var de = Bind(userDn);
+            de.RefreshCache();
+            return de.Properties["logonHours"].Value as byte[];
+        }, ct);
+
     /// <summary>Первый RDN-значение из DN (CN=... -> ...), для читаемого отображения.</summary>
     private static string Rdn(string dn)
     {

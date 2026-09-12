@@ -55,6 +55,9 @@ public sealed class AdManagementService
     public Task<OperationResult> SetPrimaryGroupAsync(TechnicianContext actor, string userDn, string groupDn, CancellationToken ct = default)
         => Run(actor, Permission.ManageGroupMembership, userDn, $"attempt: set primary group {groupDn}", () => _ad.SetPrimaryGroupAsync(userDn, groupDn, ct), ct);
 
+    public Task<OperationResult> SetLogonHoursAsync(TechnicianContext actor, string userDn, byte[]? mask, CancellationToken ct = default)
+        => Run(actor, Permission.SetAccountOptions, userDn, "attempt: set logon hours", () => _ad.SetLogonHoursAsync(userDn, mask, ct), ct);
+
     public Task<OperationResult> CreateGroupAsync(TechnicianContext actor, CreateGroupRequest request, CancellationToken ct = default)
         => Run(actor, Permission.CreateGroup, request.TargetOuDn, $"attempt: create group {request.SamAccountName}", () => _ad.CreateGroupAsync(request, ct), ct);
 

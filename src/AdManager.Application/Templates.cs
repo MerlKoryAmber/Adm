@@ -32,6 +32,7 @@ public static class FieldCatalog
         new("__notDelegated", "Account sensitive, cannot be delegated", "Account"),
         new("__desOnly", "Use Kerberos DES key only", "Account"),
         new("__noPreauth", "Do not require Kerberos preauth", "Account"),
+        new("__logonHours", "Logon hours (7×24, UTC)", "Account"),
         // Address
         new("streetAddress", "Street", "Address"),
         new("postOfficeBox", "P.O. Box", "Address"),
@@ -165,7 +166,7 @@ public static class TemplateDefaults
     {
         Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
         Tab("Account", "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange",
-            "__cannotChangePwd", "__reversibleEncryption", "__smartcardRequired", "__notDelegated", "__desOnly", "__noPreauth", "__password"),
+            "__cannotChangePwd", "__reversibleEncryption", "__smartcardRequired", "__notDelegated", "__desOnly", "__noPreauth", "__logonHours", "__password"),
         Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
         Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
         Tab("Organization", "title", "department", "company", "manager"),

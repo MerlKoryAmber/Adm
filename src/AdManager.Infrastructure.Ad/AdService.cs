@@ -193,6 +193,17 @@ public sealed class AdService : IAdService
             return OperationResult.Ok();
         }, ct);
 
+    public Task<OperationResult> SetLogonHoursAsync(string userDn, byte[]? mask, CancellationToken ct = default)
+        => Do(() =>
+        {
+            using var de = Bind(userDn);
+            if (mask is null || mask.Length == 0) de.Properties["logonHours"].Clear();          // нет атрибута = вход всегда разрешён
+            else if (mask.Length != 21) return OperationResult.Fail("logonHours must be 21 bytes.");
+            else de.Properties["logonHours"].Value = mask;
+            de.CommitChanges();
+            return OperationResult.Ok();
+        }, ct);
+
     public Task<OperationResult> CreateGroupAsync(CreateGroupRequest request, CancellationToken ct = default)
         => Do(() =>
         {

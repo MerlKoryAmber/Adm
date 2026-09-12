@@ -147,3 +147,11 @@ a { color: var(--link); }
 .fieldrow { display: flex; align-items: center; gap: 10px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
 .fieldrow .fname { font-weight: 500; }
 .fieldrow .fkey { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+
+/* Logon hours grid (7×24) */
+table.lh { border-collapse: collapse; margin: 6px 0; }
+table.lh th { font-size: 10px; color: var(--muted); font-weight: 500; padding: 1px 3px; text-align: center; }
+table.lh td { width: 15px; height: 15px; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+table.lh td.on { background: var(--ok); }
+table.lh td.off { background: var(--surface-hover); }
+table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); }

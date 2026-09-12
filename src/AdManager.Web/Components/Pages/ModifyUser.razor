@@ -75,6 +75,38 @@ else
                 <div class="checkbox"><input type="checkbox" checked="@uacFlags.GetValueOrDefault(k)" @onchange="e => ToggleUac(k, (bool)(e.Value ?? false))" /><label>@FieldCatalog.Label(k)</label></div>
                 @if (k == "__cannotChangePwd") { <div class="hint">Written as UAC bit 0x40; in AD "cannot change password" is enforced via ACL, so effect is limited (ACL variant is a separate step).</div> }
             }
+            else if (key == "__logonHours")
+            {
+                <label>Logon hours (UTC)</label>
+                <div class="hint">Green = logon allowed. Times are UTC — ADUC displays them shifted to local time.</div>
+                <div style="overflow-x:auto">
+                    <table class="lh">
+                        <thead>
+                            <tr><th></th>@for (int h = 0; h < 24; h++) { <th>@h</th> }</tr>
+                        </thead>
+                        <tbody>
+                            @for (int d = 0; d < 7; d++)
+                            {
+                                var dd = d;
+                                <tr>
+                                    <th>@Days[dd]</th>
+                                    @for (int h = 0; h < 24; h++)
+                                    {
+                                        var hh = h;
+                                        <td class="@(logonGrid[dd, hh] ? "on" : "off")" title="@Days[dd] @hh:00" @onclick="() => logonGrid[dd, hh] = !logonGrid[dd, hh]"></td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="btnrow">
+                    <button @onclick="() => FillLogon(true)">Allow all</button>
+                    <button @onclick="() => FillLogon(false)">Deny all</button>
+                    <button class="primary" @onclick="SaveLogonHours">Save hours</button>
+                    <button @onclick="ClearLogonHours">Clear (always allowed)</button>
+                </div>
+            }
             else if (key == "manager")
             {
                 <label>Manager</label>
@@ -183,6 +215,8 @@ else
     private string addGroupDn = "", primaryGroupSel = "";
     private string managerSearch = "", managerDisplay = "";
     private List<AdSearchResult>? managerResults;
+    private readonly bool[,] logonGrid = new bool[7, 24];
+    private static readonly string[] Days = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
     private DateTime? expiry;
     private string? banner; private bool ok;
 
@@ -214,6 +248,7 @@ else
             userGroups = (await Dir.ListUserGroupsAsync(Dn)).ToList();
             allGroups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList();
             managerDisplay = Rdn(model.GetValueOrDefault("manager"));
+            UnpackLogon(await Dir.GetLogonHoursAsync(Dn));
         }
         catch (Exception ex) { ok = false; banner = "Error loading user: " + ex.Message; }
     }
@@ -314,6 +349,39 @@ else
 
     private void PickManager(AdSearchResult m) { model!["manager"] = m.Dn; managerDisplay = m.Name; managerResults = null; managerSearch = ""; }
     private void ClearManager() { model!["manager"] = ""; managerDisplay = ""; }
+
+    // ---- logon hours (168 бит = 7×24, UTC; байт=idx/8, бит=idx%8, idx=day*24+hour) ----
+    private void UnpackLogon(byte[]? mask)
+    {
+        for (int d = 0; d < 7; d++)
+            for (int h = 0; h < 24; h++)
+            {
+                if (mask is null || mask.Length != 21) { logonGrid[d, h] = true; continue; } // не задано = разрешено всегда
+                var idx = d * 24 + h;
+                logonGrid[d, h] = ((mask[idx / 8] >> (idx % 8)) & 1) != 0;
+            }
+    }
+
+    private byte[] PackLogon()
+    {
+        var bytes = new byte[21];
+        for (int d = 0; d < 7; d++)
+            for (int h = 0; h < 24; h++)
+                if (logonGrid[d, h]) { var idx = d * 24 + h; bytes[idx / 8] |= (byte)(1 << (idx % 8)); }
+        return bytes;
+    }
+
+    private void FillLogon(bool value)
+    {
+        for (int d = 0; d < 7; d++) for (int h = 0; h < 24; h++) logonGrid[d, h] = value;
+    }
+
+    private async Task SaveLogonHours() => Show(await Mgmt.SetLogonHoursAsync(await Actor(), Dn!, PackLogon()));
+    private async Task ClearLogonHours()
+    {
+        Show(await Mgmt.SetLogonHoursAsync(await Actor(), Dn!, null));
+        FillLogon(true);
+    }
 
     private static string Rdn(string? dn)
     {

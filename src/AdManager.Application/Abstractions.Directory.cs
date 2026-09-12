@@ -37,6 +37,9 @@ public interface IAdDirectory
 
     /// <summary>Группы пользователя (memberOf, многозначный). Name — читаемое имя (CN).</summary>
     Task<IReadOnlyList<AdGroupSummary>> ListUserGroupsAsync(string userDn, CancellationToken ct = default);
+
+    /// <summary>Маска logonHours (21 байт, 168 бит = 7×24, UTC). null — атрибут не задан (вход разрешён всегда).</summary>
+    Task<byte[]?> GetLogonHoursAsync(string userDn, CancellationToken ct = default);
     Task<IReadOnlyList<AdComputerSummary>> ListComputersAsync(string ouDn, bool subtree, CancellationToken ct = default);
     Task<IReadOnlyList<AdContactSummary>> ListContactsAsync(string ouDn, bool subtree, CancellationToken ct = default);
 

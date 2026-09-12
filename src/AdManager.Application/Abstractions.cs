@@ -94,6 +94,8 @@ public interface IAdService
     Task<OperationResult> RenameAsync(string dn, string newRdn, CancellationToken ct = default);
     Task<OperationResult> SetAccountOptionsAsync(string userDn, AccountOptions options, CancellationToken ct = default);
     Task<OperationResult> SetPrimaryGroupAsync(string userDn, string groupDn, CancellationToken ct = default);
+    /// <summary>Записать logonHours (21 байт) или очистить (null/пусто = вход разрешён всегда).</summary>
+    Task<OperationResult> SetLogonHoursAsync(string userDn, byte[]? mask, CancellationToken ct = default);
     Task<OperationResult> CreateGroupAsync(CreateGroupRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateComputerAsync(CreateComputerRequest request, CancellationToken ct = default);
     Task<OperationResult> CreateContactAsync(CreateContactRequest request, CancellationToken ct = default);
