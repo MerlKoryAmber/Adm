@@ -102,6 +102,13 @@ public interface IExchangeService
     Task<OperationResult> SetMailboxPropertiesAsync(string identity, MailboxProperties properties, CancellationToken ct = default);
     Task<OperationResult> CreateDistributionGroupAsync(string name, string targetOuDn, CancellationToken ct = default);
     Task<OperationResult> ManageDistributionMembersAsync(string groupIdentity, IReadOnlyCollection<string> add, IReadOnlyCollection<string> remove, CancellationToken ct = default);
+
+    // Mailbox permissions (Full Access / Send As / Send on Behalf)
+    Task<OperationResult> AddMailboxPermissionAsync(string identity, string trustee, CancellationToken ct = default);
+    Task<OperationResult> RemoveMailboxPermissionAsync(string identity, string trustee, CancellationToken ct = default);
+    Task<OperationResult> AddSendAsAsync(string identity, string trustee, CancellationToken ct = default);
+    Task<OperationResult> RemoveSendAsAsync(string identity, string trustee, CancellationToken ct = default);
+    Task<OperationResult> SetSendOnBehalfAsync(string identity, string trustee, bool add, CancellationToken ct = default);
 }
 
 /// <summary>Граница безопасности: разрешена ли операция технику над объектом (роль + scope).</summary>

@@ -36,6 +36,21 @@ public sealed class ExchangeManagementService
     public Task<OperationResult> ManageDistributionMembersAsync(TechnicianContext actor, string groupIdentity, IReadOnlyCollection<string> add, IReadOnlyCollection<string> remove, CancellationToken ct = default)
         => Run(actor, Permission.ManageDistribution, groupIdentity, "attempt: distribution membership", () => _ex.ManageDistributionMembersAsync(groupIdentity, add, remove, ct), ct);
 
+    public Task<OperationResult> AddMailboxPermissionAsync(TechnicianContext actor, string identity, string trustee, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: add Full Access for {trustee}", () => _ex.AddMailboxPermissionAsync(identity, trustee, ct), ct);
+
+    public Task<OperationResult> RemoveMailboxPermissionAsync(TechnicianContext actor, string identity, string trustee, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: remove Full Access for {trustee}", () => _ex.RemoveMailboxPermissionAsync(identity, trustee, ct), ct);
+
+    public Task<OperationResult> AddSendAsAsync(TechnicianContext actor, string identity, string trustee, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: add Send As for {trustee}", () => _ex.AddSendAsAsync(identity, trustee, ct), ct);
+
+    public Task<OperationResult> RemoveSendAsAsync(TechnicianContext actor, string identity, string trustee, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: remove Send As for {trustee}", () => _ex.RemoveSendAsAsync(identity, trustee, ct), ct);
+
+    public Task<OperationResult> SetSendOnBehalfAsync(TechnicianContext actor, string identity, string trustee, bool add, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: {(add ? "add" : "remove")} Send on Behalf for {trustee}", () => _ex.SetSendOnBehalfAsync(identity, trustee, add, ct), ct);
+
     private async Task<OperationResult> Run(TechnicianContext actor, Permission perm, string targetDn, string attemptMsg, Func<Task<OperationResult>> op, CancellationToken ct)
     {
         var decision = await _rbac.AuthorizeAsync(actor, perm, targetDn, ct);

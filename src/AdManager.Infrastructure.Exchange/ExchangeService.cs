@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Net;
@@ -68,6 +69,42 @@ public sealed class ExchangeService : IExchangeService
                 if (!r.Success) return r;
             }
             return OperationResult.Ok();
+        }, ct);
+
+    public Task<OperationResult> AddMailboxPermissionAsync(string identity, string trustee, CancellationToken ct = default)
+        => Run(ps => ps.AddCommand("Add-MailboxPermission")
+            .AddParameter("Identity", identity)
+            .AddParameter("User", trustee)
+            .AddParameter("AccessRights", "FullAccess")
+            .AddParameter("AutoMapping", true), ct);
+
+    public Task<OperationResult> RemoveMailboxPermissionAsync(string identity, string trustee, CancellationToken ct = default)
+        => Run(ps => ps.AddCommand("Remove-MailboxPermission")
+            .AddParameter("Identity", identity)
+            .AddParameter("User", trustee)
+            .AddParameter("AccessRights", "FullAccess")
+            .AddParameter("Confirm", false), ct);
+
+    public Task<OperationResult> AddSendAsAsync(string identity, string trustee, CancellationToken ct = default)
+        => Run(ps => ps.AddCommand("Add-ADPermission")
+            .AddParameter("Identity", identity)
+            .AddParameter("User", trustee)
+            .AddParameter("ExtendedRights", "Send As"), ct);
+
+    public Task<OperationResult> RemoveSendAsAsync(string identity, string trustee, CancellationToken ct = default)
+        => Run(ps => ps.AddCommand("Remove-ADPermission")
+            .AddParameter("Identity", identity)
+            .AddParameter("User", trustee)
+            .AddParameter("ExtendedRights", "Send As")
+            .AddParameter("Confirm", false), ct);
+
+    public Task<OperationResult> SetSendOnBehalfAsync(string identity, string trustee, bool add, CancellationToken ct = default)
+        => Run(ps =>
+        {
+            var delta = new Hashtable { { add ? "Add" : "Remove", trustee } };
+            ps.AddCommand("Set-Mailbox")
+              .AddParameter("Identity", identity)
+              .AddParameter("GrantSendOnBehalfTo", delta);
         }, ct);
 
     private Task<OperationResult> Run(Action<PowerShell> build, CancellationToken ct)
