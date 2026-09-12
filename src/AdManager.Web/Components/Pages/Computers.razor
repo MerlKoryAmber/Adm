@@ -2,6 +2,7 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject UiOptions Ui
+@inject NavigationManager Nav
 
 <PageTitle>Computer Management — admanager</PageTitle>
 <h1>Computer Management</h1>
@@ -25,6 +26,7 @@
         </select>
     </label>
     <span class="grow"></span>
+    <button @onclick='() => Nav.NavigateTo("computers/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
 </div>
 
@@ -101,8 +103,7 @@ else
     </div>
 }
 
-<div class="layout2" style="margin-top:16px">
-    <div class="panel">
+<div class="panel" style="margin-top:16px">
         @if (sel is null) { <p class="muted">Select a computer (Manage ▸) to manage.</p> }
         else
         {
@@ -143,15 +144,6 @@ else
                 <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
             }
         }
-    </div>
-
-    <div class="panel">
-        <h3>Create computer</h3>
-        <label>Name</label>
-        <input type="text" @bind="newName" placeholder="WKS-01" />
-        <div class="hint">Created in the selected OU. sAMAccountName becomes NAME$.</div>
-        <div class="btnrow"><button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button></div>
-    </div>
 </div>
 
 @code {
@@ -164,7 +156,7 @@ else
     private readonly HashSet<string> selected = new();
     private string search = "", ouDn = "";
     private bool onlyDisabled;
-    private string newName = "", renameTo = "", moveTo = "", bulkMoveTo = "";
+    private string renameTo = "", moveTo = "", bulkMoveTo = "";
     private string cDesc = "", cLocation = "", cManagedBy = "";
     private int page;
     private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
@@ -267,11 +259,6 @@ else
     private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }
     private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
     private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
-    private async Task Create()
-    {
-        Show(await Mgmt.CreateComputerAsync(await Actor(), new CreateComputerRequest(ouDn, newName.Trim())));
-        newName = ""; await Load();
-    }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);

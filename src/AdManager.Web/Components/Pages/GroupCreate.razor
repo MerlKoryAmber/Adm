@@ -1,0 +1,86 @@
+@page "/groups/create"
+@inject IAdDirectory Dir
+@inject AdManagementService Mgmt
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Create group — admanager</PageTitle>
+<h1>Create group</h1>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:660px">
+    <label>Target OU</label>
+    <select @bind="ouDn">
+        <option value="@Ui.BaseDn">(domain root)</option>
+        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+        {
+            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+        }
+    </select>
+    <div class="hint">The group is created in this OU.</div>
+
+    <label>SAM account name</label>
+    <input type="text" @bind="ngSam" placeholder="Sales-Team" />
+    <div class="hint">Pre-Windows 2000 account name for the group.</div>
+
+    <label>Name</label>
+    <input type="text" @bind="ngName" placeholder="Sales Team" />
+    <div class="hint">Display name shown in the directory.</div>
+
+    <label>Scope</label>
+    <select @bind="ngScope">
+        <option value="Global">Global</option>
+        <option value="DomainLocal">Domain local</option>
+        <option value="Universal">Universal</option>
+    </select>
+    <div class="hint">Membership reach of the group.</div>
+
+    <label>Type</label>
+    <select @bind="ngKind">
+        <option value="Security">Security</option>
+        <option value="Distribution">Distribution</option>
+    </select>
+    <div class="hint">Security groups grant access; distribution groups are for mail only.</div>
+
+    <div class="btnrow" style="margin-top:16px">
+        <button class="primary" @onclick="CreateGroup" disabled="@(string.IsNullOrWhiteSpace(ngSam) || string.IsNullOrWhiteSpace(ngName))">Create group</button>
+        <button @onclick='() => Nav.NavigateTo("groups")'>Back to groups</button>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<AdOuNode>? ous;
+    private string ouDn = "";
+    private string ngSam = "", ngName = "", ngScope = "Global", ngKind = "Security";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        ouDn = ous.Any(o => o.Dn == Ui.GroupsOu) ? Ui.GroupsOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
+    }
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task CreateGroup()
+    {
+        var scope = Enum.Parse<GroupScope>(ngScope);
+        var kind = Enum.Parse<GroupKind>(ngKind);
+        var r = await Mgmt.CreateGroupAsync(await Actor(), new CreateGroupRequest(ouDn, ngSam.Trim(), ngName.Trim(), scope, kind));
+        ok = r.Success;
+        banner = r.Success ? $"Group '{ngName}' created." : ("Error: " + r.Message);
+        if (r.Success) { ngSam = ""; ngName = ""; }
+    }
+
+    private static string Indent(int d) => new string(' ', d * 3);
+}
