@@ -155,11 +155,22 @@ public sealed class AdService : IAdService
         => Do(() =>
         {
             const int DONT_EXPIRE_PASSWORD = 0x10000;
-            const int PASSWD_CANT_CHANGE = 0x40;
+            const int PASSWD_CANT_CHANGE = 0x40;      // прим.: AD не применяет через UAC (реально — ACL); оставлено как есть
+            const int ENCRYPTED_TEXT_PASSWORD_ALLOWED = 0x80;
+            const int SMARTCARD_REQUIRED = 0x40000;
+            const int NOT_DELEGATED = 0x100000;
+            const int USE_DES_KEY_ONLY = 0x200000;
+            const int DONT_REQUIRE_PREAUTH = 0x400000;
             using var de = Bind(userDn);
             var uac = (int)(de.Properties["userAccountControl"].Value ?? UF_NORMAL_ACCOUNT);
-            if (options.PasswordNeverExpires is bool pne) uac = pne ? (uac | DONT_EXPIRE_PASSWORD) : (uac & ~DONT_EXPIRE_PASSWORD);
-            if (options.CannotChangePassword is bool cc) uac = cc ? (uac | PASSWD_CANT_CHANGE) : (uac & ~PASSWD_CANT_CHANGE);
+            static int Apply(int uacVal, bool? on, int bit) => on is bool v ? (v ? (uacVal | bit) : (uacVal & ~bit)) : uacVal;
+            uac = Apply(uac, options.PasswordNeverExpires, DONT_EXPIRE_PASSWORD);
+            uac = Apply(uac, options.CannotChangePassword, PASSWD_CANT_CHANGE);
+            uac = Apply(uac, options.ReversibleEncryption, ENCRYPTED_TEXT_PASSWORD_ALLOWED);
+            uac = Apply(uac, options.SmartcardRequired, SMARTCARD_REQUIRED);
+            uac = Apply(uac, options.NotDelegated, NOT_DELEGATED);
+            uac = Apply(uac, options.UseDesKeyOnly, USE_DES_KEY_ONLY);
+            uac = Apply(uac, options.DontRequirePreauth, DONT_REQUIRE_PREAUTH);
             de.Properties["userAccountControl"].Value = uac;
             if (options.MustChangePasswordAtNextLogon is bool mc) de.Properties["pwdLastSet"].Value = mc ? 0 : -1;
             if (options.ClearAccountExpiry) de.Properties["accountExpires"].Value = 0;

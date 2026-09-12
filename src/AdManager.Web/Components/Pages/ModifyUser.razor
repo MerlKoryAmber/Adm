@@ -68,6 +68,12 @@ else
                     <button @onclick="ResetPassword" disabled="@string.IsNullOrEmpty(resetPwd)">Reset</button>
                 </div>
             }
+            else if (key is "__cannotChangePwd" or "__reversibleEncryption" or "__smartcardRequired" or "__notDelegated" or "__desOnly" or "__noPreauth")
+            {
+                var k = key;
+                <div class="checkbox"><input type="checkbox" checked="@uacFlags.GetValueOrDefault(k)" @onchange="e => ToggleUac(k, (bool)(e.Value ?? false))" /><label>@FieldCatalog.Label(k)</label></div>
+                @if (k == "__cannotChangePwd") { <div class="hint">Written as UAC bit 0x40; in AD "cannot change password" is enforced via ACL, so effect is limited (ACL variant is a separate step).</div> }
+            }
             else
             {
                 <label>@FieldCatalog.Label(key)@(req)</label>
@@ -109,6 +115,7 @@ else
     private int sel;
     private string sam = "", resetPwd = "";
     private bool pne, enabled;
+    private readonly Dictionary<string, bool> uacFlags = new(); // __cannotChangePwd/__reversibleEncryption/... из userAccountControl
     private DateTime? expiry;
     private string? banner; private bool ok;
 
@@ -130,6 +137,12 @@ else
             var uac = int.TryParse(det.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
             pne = (uac & 0x10000) != 0;
             enabled = (uac & 0x2) == 0;
+            uacFlags["__cannotChangePwd"] = (uac & 0x40) != 0;
+            uacFlags["__reversibleEncryption"] = (uac & 0x80) != 0;
+            uacFlags["__smartcardRequired"] = (uac & 0x40000) != 0;
+            uacFlags["__notDelegated"] = (uac & 0x100000) != 0;
+            uacFlags["__desOnly"] = (uac & 0x200000) != 0;
+            uacFlags["__noPreauth"] = (uac & 0x400000) != 0;
             templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
         }
         catch (Exception ex) { ok = false; banner = "Error loading user: " + ex.Message; }
@@ -184,6 +197,22 @@ else
         Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(PasswordNeverExpires: pne)));
     }
     private async Task ForceChange() => Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, new AccountOptions(MustChangePasswordAtNextLogon: true)));
+
+    private async Task ToggleUac(string key, bool value)
+    {
+        uacFlags[key] = value;
+        var o = key switch
+        {
+            "__cannotChangePwd" => new AccountOptions(CannotChangePassword: value),
+            "__reversibleEncryption" => new AccountOptions(ReversibleEncryption: value),
+            "__smartcardRequired" => new AccountOptions(SmartcardRequired: value),
+            "__notDelegated" => new AccountOptions(NotDelegated: value),
+            "__desOnly" => new AccountOptions(UseDesKeyOnly: value),
+            "__noPreauth" => new AccountOptions(DontRequirePreauth: value),
+            _ => new AccountOptions(),
+        };
+        Show(await Mgmt.SetAccountOptionsAsync(await Actor(), Dn!, o));
+    }
     private async Task ResetPassword()
     {
         Show(await Mgmt.ResetPasswordAsync(await Actor(), Dn!, resetPwd, false));

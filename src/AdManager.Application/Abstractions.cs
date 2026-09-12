@@ -44,7 +44,13 @@ public sealed record AccountOptions(
     bool? MustChangePasswordAtNextLogon = null,
     bool? CannotChangePassword = null,
     DateTime? AccountExpiresUtc = null,
-    bool ClearAccountExpiry = false);
+    bool ClearAccountExpiry = false,
+    // userAccountControl-флаги (вкладка Account в ADUC)
+    bool? ReversibleEncryption = null,   // ENCRYPTED_TEXT_PASSWORD_ALLOWED 0x80
+    bool? SmartcardRequired = null,      // SMARTCARD_REQUIRED 0x40000
+    bool? NotDelegated = null,           // NOT_DELEGATED 0x100000
+    bool? UseDesKeyOnly = null,          // USE_DES_KEY_ONLY 0x200000
+    bool? DontRequirePreauth = null);    // DONT_REQUIRE_PREAUTH 0x400000
 
 public sealed record MailboxProperties(
     string? Alias = null,

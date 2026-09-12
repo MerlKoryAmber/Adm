@@ -26,6 +26,12 @@ public static class FieldCatalog
         new("__enabled", "Enabled", "Account"),
         new("__mustChange", "Must change password", "Account"),
         new("__pwdNeverExpires", "Password never expires", "Account"),
+        new("__cannotChangePwd", "User cannot change password", "Account"),
+        new("__reversibleEncryption", "Store password reversible encryption", "Account"),
+        new("__smartcardRequired", "Smart card required for logon", "Account"),
+        new("__notDelegated", "Account sensitive, cannot be delegated", "Account"),
+        new("__desOnly", "Use Kerberos DES key only", "Account"),
+        new("__noPreauth", "Do not require Kerberos preauth", "Account"),
         // Address
         new("streetAddress", "Street", "Address"),
         new("postOfficeBox", "P.O. Box", "Address"),
@@ -69,7 +75,8 @@ public static class FieldCatalog
     public static bool IsSpecial(string key) => key.StartsWith("__", StringComparison.Ordinal) || key == "sAMAccountName";
 
     /// <summary>Булевы спец-контролы (чекбоксы).</summary>
-    public static bool IsBool(string key) => key is "__enabled" or "__mustChange" or "__pwdNeverExpires";
+    public static bool IsBool(string key) => key is "__enabled" or "__mustChange" or "__pwdNeverExpires"
+        or "__cannotChangePwd" or "__reversibleEncryption" or "__smartcardRequired" or "__notDelegated" or "__desOnly" or "__noPreauth";
 
     /// <summary>Поля, к которым применимо авто-именование (из имени/фамилии).</summary>
     public static bool SupportsNaming(string key) => key is "sAMAccountName" or "userPrincipalName" or "displayName";
@@ -154,7 +161,8 @@ public static class TemplateDefaults
     public static List<TemplateTab> Modify() => new()
     {
         Tab("General", "givenName", "initials", "sn", "displayName", "description", "physicalDeliveryOfficeName", "telephoneNumber", "mail", "wWWHomePage"),
-        Tab("Account", "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange", "__password"),
+        Tab("Account", "userPrincipalName", "__enabled", "__pwdNeverExpires", "__mustChange",
+            "__cannotChangePwd", "__reversibleEncryption", "__smartcardRequired", "__notDelegated", "__desOnly", "__noPreauth", "__password"),
         Tab("Address", "streetAddress", "postOfficeBox", "l", "st", "postalCode", "co", "c"),
         Tab("Telephones", "homePhone", "pager", "mobile", "facsimileTelephoneNumber", "ipPhone", "info"),
         Tab("Organization", "title", "department", "company", "manager"),
