@@ -29,6 +29,15 @@
 | R7 | Файловые сторы: запись без temp+rename, нет межпроцессной блокировки (web-garden) | minor | открыт — закрывается EF/SQL-миграцией |
 | R8 | Modify без оптимистичной блокировки (два техника затирают друг друга) | minor | открыт |
 
+## Отложено — WIP-ветки на GitHub (не собираются, доделать)
+
+| Задача | Статус | Ветка | Готово / Осталось |
+|--------|--------|-------|--------------------|
+| **Settings-пиллар + напоминатель истечения пароля по почте** (новая верхняя вкладка) | ОТЛОЖЕНО | `wip/settings-password-notifier` | Готово: модели/контракты (`Notifications.cs`), `FileSettingsStore`, `SmtpEmailSender`, `PasswordExpiryService` (msDS-UserPasswordExpiryTimeComputed). Осталось: `PasswordExpiryNotifier` (BackgroundService), `Settings.razor`, `PasswordExpiry.razor`, верхние табы в `MainLayout`, DI в `Program.cs`. **Без этого не собирается.** |
+| **AD quick-wins: inactive-отчёт / экспорт членов группы / member-of** | ОТЛОЖЕНО | `wip/inactive-report` | Готово частично: метод `IAdDirectory`+`AdDirectory` для `lastLogonTimestamp`, начало отчёта в `Reports.razor`. Осталось: доделать отчёт (ReportDef/catalog/CSV), + Export members CSV на `Groups.razor`, + «Member of» на `ModifyUser.razor`. **Не завершено/не собрано.** |
+
+Backlog-фичи целиком — в `docs/feature-backlog.md`.
+
 ## UI (по фидбэку)
 
 - Приблизить GUI к ManageEngine ADManager Plus (сделано: топ-табы, левое дерево, bulk) — продолжать сверять.
