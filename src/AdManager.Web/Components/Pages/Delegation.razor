@@ -62,7 +62,7 @@ else
             }
             @if (rolePerms.Contains(Permission.ModifyAttributes))
             {
-                <FieldPicker Title="Modify user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
+                <FieldPicker Title="Modify users — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
             }
             <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || rolePerms.Count == 0)">Create role</button></div>
         </div>
@@ -190,7 +190,7 @@ else
         [Permission.EnableDisableUser] = "Enable / disable user",
         [Permission.CreateUser] = "Create user",
         [Permission.DeleteUser] = "Delete user",
-        [Permission.ModifyAttributes] = "Modify attributes",
+        [Permission.ModifyAttributes] = "Modify users",
         [Permission.MoveObject] = "Move object",
         [Permission.ManageGroupMembership] = "Manage group membership",
         [Permission.Rename] = "Rename",
