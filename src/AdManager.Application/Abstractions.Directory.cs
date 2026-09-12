@@ -22,6 +22,18 @@ public sealed record AdComputerSummary(string Dn, string SamAccountName, string 
 
 public sealed record AdContactSummary(string Dn, string Name, string? Mail);
 
+/// <summary>Пользователь с датой последнего входа (lastLogonTimestamp). LastLogonUtc = null — никогда не входил.</summary>
+public sealed record AdUserLastLogon(
+    string Dn,
+    string SamAccountName,
+    string DisplayName,
+    string? Mail,
+    bool Enabled,
+    DateTime? LastLogonUtc);
+
+/// <summary>Группа, членом которой является пользователь (для секции «Member of»).</summary>
+public sealed record AdUserGroup(string Dn, string Name);
+
 public sealed record AdSearchResult(string Dn, string Name, string? SamAccountName, string ObjectClass, bool? Enabled);
 
 public sealed record AdObjectDetails(string Dn, IReadOnlyDictionary<string, string?> Attributes);
@@ -42,4 +54,10 @@ public interface IAdDirectory
 
     /// <summary>Поиск объектов по подстроке (cn/sAMAccountName/displayName/mail) в поддереве.</summary>
     Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default);
+
+    /// <summary>Пользователи поддерева с атрибутом lastLogonTimestamp (для отчёта неактивных).</summary>
+    Task<IReadOnlyList<AdUserLastLogon>> ListUsersWithLastLogonAsync(string baseDn, CancellationToken ct = default);
+
+    /// <summary>Группы пользователя (memberOf, многозначный) — только чтение.</summary>
+    Task<IReadOnlyList<AdUserGroup>> ListUserGroupsAsync(string userDn, CancellationToken ct = default);
 }

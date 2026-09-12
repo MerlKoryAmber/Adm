@@ -234,6 +234,60 @@ public sealed class AdDirectory : IAdDirectory
             return list.OrderBy(x => x.ObjectClass).ThenBy(x => x.Name).ToList();
         }, ct);
 
+    public Task<IReadOnlyList<AdUserLastLogon>> ListUsersWithLastLogonAsync(string baseDn, CancellationToken ct = default)
+        => Task.Run<IReadOnlyList<AdUserLastLogon>>(() =>
+        {
+            using var root = Bind(baseDn);
+            using var s = new DirectorySearcher(root)
+            {
+                Filter = "(&(objectCategory=person)(objectClass=user))",
+                SearchScope = SearchScope.Subtree,
+                PageSize = 1000,
+            };
+            foreach (var p in new[] { "distinguishedName", "sAMAccountName", "displayName", "mail", "userAccountControl", "lastLogonTimestamp" })
+                s.PropertiesToLoad.Add(p);
+
+            var list = new List<AdUserLastLogon>();
+            using var results = s.FindAll();
+            foreach (SearchResult r in results)
+            {
+                var uac = GetInt(r, "userAccountControl");
+                var raw = GetLong(r, "lastLogonTimestamp");
+                // FILETIME (100ns с 1601-01-01 UTC). Отсутствие/0 = никогда не входил.
+                DateTime? last = raw > 0 ? DateTime.FromFileTimeUtc(raw) : null;
+                list.Add(new AdUserLastLogon(
+                    Str(r, "distinguishedName"),
+                    Str(r, "sAMAccountName"),
+                    Str(r, "displayName"),
+                    StrOrNull(r, "mail"),
+                    Enabled: (uac & UF_ACCOUNTDISABLE) == 0,
+                    LastLogonUtc: last));
+            }
+            return list.OrderBy(u => u.DisplayName).ToList();
+        }, ct);
+
+    public Task<IReadOnlyList<AdUserGroup>> ListUserGroupsAsync(string userDn, CancellationToken ct = default)
+        => Task.Run<IReadOnlyList<AdUserGroup>>(() =>
+        {
+            using var de = Bind(userDn);
+            de.RefreshCache(new[] { "memberOf" });
+            var list = new List<AdUserGroup>();
+            // memberOf — многозначный: читаем всю коллекцию, а не первое значение.
+            foreach (var m in de.Properties["memberOf"])
+            {
+                var dn = m?.ToString();
+                if (string.IsNullOrEmpty(dn)) continue;
+                list.Add(new AdUserGroup(dn, CnOf(dn)));
+            }
+            return list.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }, ct);
+
+    private static string CnOf(string dn)
+    {
+        var first = dn.Split(',').FirstOrDefault()?.Trim() ?? dn;
+        return first.StartsWith("CN=", StringComparison.OrdinalIgnoreCase) ? first[3..] : first;
+    }
+
     private static string ClassOf(SearchResult r)
     {
         if (!r.Properties.Contains("objectClass")) return "object";

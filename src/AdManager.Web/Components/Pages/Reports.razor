@@ -31,6 +31,12 @@
             <strong>@current.Title</strong>
             <span class="grow"></span>
             <input class="searchbox" type="text" placeholder="Filter name / account / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+            @if (current.Key == "inactive")
+            {
+                <label class="chkinline">Inactive for (days):
+                    <input type="number" min="1" style="width:80px" @bind="inactiveDays" @bind:after="() => page = 0" />
+                </label>
+            }
             <button @onclick="Load">Refresh</button>
             <button @onclick="ExportCsv" disabled="@(users is null)">Export CSV</button>
         </div>
@@ -58,7 +64,9 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Display name</th><th>Account</th><th>UPN</th><th>Email</th><th>Status</th><th></th>
+                                <th>Display name</th><th>Account</th><th>UPN</th><th>Email</th>
+                                @if (current.Key == "inactive") { <th>Last logon</th> }
+                                <th>Status</th><th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -69,6 +77,7 @@
                                     <td>@u.SamAccountName</td>
                                     <td>@(u.Upn ?? "—")</td>
                                     <td>@(string.IsNullOrWhiteSpace(u.Mail) ? "—" : u.Mail)</td>
+                                    @if (current.Key == "inactive") { <td>@LastLogonText(u.Dn)</td> }
                                     <td>
                                         <span class="badge @(u.Enabled ? "ok" : "off")">@(u.Enabled ? "Enabled" : "Disabled")</span>
                                         @if (u.LockedOut) { <span class="badge warn">Locked</span> }
@@ -78,7 +87,7 @@
                             }
                             @if (pageItems.Count == 0)
                             {
-                                <tr><td colspan="6" class="muted">No accounts match this report.</td></tr>
+                                <tr><td colspan="@(current.Key == "inactive" ? 7 : 6)" class="muted">No accounts match this report.</td></tr>
                             }
                         </tbody>
                     </table>
@@ -101,7 +110,7 @@
     private const int PageSize = 50;
     private const int UF_PASSWORD_NEVER_EXPIRES = 0x10000;
 
-    private sealed record ReportDef(string Key, string Title, string Hint, bool NeedsAttrs);
+    private sealed record ReportDef(string Key, string Title, string Hint, bool NeedsAttrs, bool NeedsLastLogon = false);
 
     private static readonly ReportDef[] Catalog =
     {
@@ -111,11 +120,15 @@
         new("noemail",   "Users without email",    "Accounts with an empty mail attribute.", false),
         new("nomanager", "Users without manager",  "Accounts with an empty manager attribute — queried per account, may take a moment.", true),
         new("pne",       "Password never expires", "Accounts with the userAccountControl PASSWORD_NEVER_EXPIRES (0x10000) flag — queried per account.", true),
+        new("inactive",  "Inactive users",         "Accounts whose last logon (lastLogonTimestamp) is older than N days, or who never logged on. lastLogonTimestamp is replicated with a delay of up to 14 days.", false, true),
     };
 
     private List<AdUserSummary>? users;
     private readonly Dictionary<string, (string? Manager, int Uac)> extra = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTime?> lastLogon = new(StringComparer.OrdinalIgnoreCase);
     private bool enriched;
+    private bool lastLogonLoaded;
+    private int inactiveDays = 90;
     private ReportDef current = Catalog[0];
     private string search = "";
     private int page;
