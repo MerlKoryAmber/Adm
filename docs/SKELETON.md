@@ -17,7 +17,7 @@ Web ─► Infrastructure.* (DI-композиция)
 |--------|-----|------|
 | `AdManager.Domain` | net8.0 | Сущности, enum (`Permission`, `AuditPhase`, `SubjectType`, `HelpDeskRole`, `DelegationScope`, `RoleAssignment`, `AuditEntry`, `OperationResult`). |
 | `AdManager.Application` | net8.0 | Контракты + DTO + сервисы приложения (см. ниже). |
-| `AdManager.Infrastructure.Ad` | net8.0-windows | `AdService` (write-операции S.DS), `AdDirectory` (чтение), `Ldap` (bind). |
+| `AdManager.Infrastructure.Ad` | net8.0-windows | `AdService` (write S.DS), `AdDirectory` (чтение), `GpoDirectory`/`GpoService` (GPO+gPLink), `Ldap` (bind). |
 | `AdManager.Infrastructure.Exchange` | net8.0-windows | `ExchangeService` (remote PowerShell). **Рантайм не верифицирован** (нет сервера). |
 | `AdManager.Infrastructure.Data` | net8.0 | EF `AdManagerDbContext` + `EfAuditLog`; файловые сторы `FileAuditLog`, `FileRbacStore`, `FileAutomationStore`, `FileUserTemplateStore`. |
 | `AdManager.Infrastructure.Automation` | net8.0 | `AutomationScheduler` (BackgroundService + NCrontab). |
@@ -30,6 +30,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IAdService` — write-операции AD: reset password, unlock, enable/disable, create/delete user, attrs, move, rename, group membership, account options, create group/computer/contact/OU.
 - `IAdDirectory` — чтение: users/groups/computers/contacts/OU, all-OUs, объект по атрибутам, члены группы.
 - `IExchangeService` — mailbox enable/disable/props, distribution create/membership.
+- `IGpoDirectory` (+ `GpoDirectory`) — чтение GPO и линков (gPLink); `IGpoService` (+ `GpoService`) — link/unlink/enforce/enable. Обёртка `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). DTO `GpoSummary`/`GpoLink` (`Abstractions.Gpo.cs`).
 - `IRbacEngine` (+ `RbacEngine`, `AllowAllRbacEngine`) — авторизация операции.
 - `IRbacStore` (+ `FileRbacStore`) — роли/scope/назначения.
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
@@ -57,10 +58,11 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/ous` | OU Management: create/rename/move/delete. |
 | `/contacts` | Contact Management: **грид** (поиск, bulk delete) + create/delete. |
 | `/exchange` | **грид** пользователей (Mailbox ▸, bulk enable/disable mailbox) + mailbox props + distribution groups. |
+| `/gpo` | Group Policy: список GPO (версия/статус/линки) + управление линками по scope (link/unlink/enforce/enable). |
 | `/delegation` | Roles / Scopes / Assignments (реальный RBAC). |
 | `/automation` | Автоматизации (cron МСК, create/enable/trigger/delete). |
 | `/audit` | Журнал операций (МСК, attempt+result). |
-| `/reports` | заглушка. |
+| `/reports` | Reports: All/Disabled/Locked-out/Without email/Without manager/Password never expires + фильтр/пагинация + CSV-экспорт. |
 
 ## Хостинг / конфигурация
 

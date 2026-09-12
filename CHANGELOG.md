@@ -5,6 +5,8 @@
 ## 2026-09-12 — UI-редизайн раздела Users + редактор шаблонов формы
 
 ### Добавлено
+- **Group Policy — новый пиллар** (`/gpo`): чтение GPO (groupPolicyContainer: имя, версия, статус user/computer settings), управление линками через `gPLink` по scope (домен/OU) — link/unlink/enforce/enable, счётчик линков и отметка Unlinked. Без GPMC, чистый LDAP. Контракты `IGpoDirectory`/`IGpoService`, `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). Редактирование самих настроек GPO — вне объёма. Backlog фич — `docs/feature-backlog.md`.
+- **Reports** — реальные отчёты вместо заглушки (All/Disabled/Locked-out/Without email/Without manager/Password never expires) + фильтр/пагинация + CSV-экспорт (JS-interop, RFC 4180).
 - **Редактор шаблонов формы пользователя** (аналог ADManager «User Creation/Modification Templates»): страница `/templates` (список: edit/copy/delete) и Layout-редактор `/templates/edit` — Field Tray с полями по категориям, раскладка полей по вкладкам, переименование/добавление/перемещение вкладок, порядок полей (↑↓). Модель `UserTemplate`/`TemplateTab`/`FieldCatalog`, стор `IUserTemplateStore` → `FileUserTemplateStore` (`App_Data/user-templates.json`).
 - **Create user** переведён в табовую форму (General/Account/Address/Telephones/Organization/Profile), как правка.
 - **Шаблоны подключены к формам**: на `/users/create` и `/users/modify` — селектор «Layout template»; выбранный шаблон задаёт вкладки, набор и порядок полей (спец-контролы `__password`/`__enabled`/`__mustChange`/`__pwdNeverExpires`/`sAMAccountName`). Без выбора — дефолтная раскладка (`TemplateDefaults`). Create-форма показывает Create-шаблоны, Modify — Modify-шаблоны.

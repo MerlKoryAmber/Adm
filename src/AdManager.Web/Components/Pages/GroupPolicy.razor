@@ -1,0 +1,170 @@
+@page "/gpo"
+@inject IGpoDirectory Gpo
+@inject GpoManagementService Mgmt
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+
+<PageTitle>Group Policy — admanager</PageTitle>
+<h1>Group Policy</h1>
+<p class="subtitle">Group Policy Objects and their links (create/link/enforce via gPLink over LDAP). Editing GPO settings is out of scope.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="toolbar">
+    <span class="grow"></span>
+    <button @onclick="ReloadAll">Refresh</button>
+</div>
+
+<div class="layout">
+    <!-- GPO list -->
+    <div class="canvas" style="flex:1">
+        <h3 style="margin:4px 0 8px">All GPOs @(gpos is null ? "" : $"({gpos.Count})")</h3>
+        @if (gpos is null) { <p>Loading…</p> }
+        else
+        {
+            <div class="gridpanel">
+                <div style="overflow-x:auto">
+                    <table>
+                        <thead><tr><th>Display name</th><th>Version</th><th>Settings</th><th>Links</th></tr></thead>
+                        <tbody>
+                            @foreach (var g in gpos)
+                            {
+                                var n = LinkedCount(g.Id);
+                                <tr>
+                                    <td>@g.DisplayName</td>
+                                    <td>@g.Version</td>
+                                    <td>
+                                        @if (!g.UserSettingsDisabled && !g.ComputerSettingsDisabled) { <span class="badge ok">All enabled</span> }
+                                        @if (g.UserSettingsDisabled) { <span class="badge warn">User off</span> }
+                                        @if (g.ComputerSettingsDisabled) { <span class="badge warn">Computer off</span> }
+                                    </td>
+                                    <td>@(n == 0 ? "" : null)<span class="badge @(n == 0 ? "off" : "ok")">@(n == 0 ? "Unlinked" : $"Linked ×{n}")</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Scope links -->
+    <div class="canvas" style="flex:1">
+        <h3 style="margin:4px 0 8px">Links on scope</h3>
+        <div class="panel">
+            <label>Scope (domain / OU)</label>
+            <select @bind="scopeDn" @bind:after="LoadLinks">
+                <option value="@Ui.BaseDn">(domain root)</option>
+                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
+                {
+                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
+                }
+            </select>
+
+            @if (links is null) { <p>Loading…</p> }
+            else if (links.Count == 0) { <div class="hint" style="padding:10px 0">No GPOs linked here.</div> }
+            else
+            {
+                <table style="margin-top:10px">
+                    <thead><tr><th>#</th><th>GPO</th><th>Enforced</th><th>Enabled</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var l in links)
+                        {
+                            var link = l;
+                            <tr>
+                                <td>@link.Order</td>
+                                <td>@link.GpoDisplayName</td>
+                                <td><input type="checkbox" checked="@link.Enforced" @onchange="e => SetOptions(link, (bool)(e.Value ?? false), link.Enabled)" /></td>
+                                <td><input type="checkbox" checked="@link.Enabled" @onchange="e => SetOptions(link, link.Enforced, (bool)(e.Value ?? false))" /></td>
+                                <td><button class="linkbtn danger" @onclick="() => Unlink(link.GpoId)">Unlink</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <hr />
+            <label>Link a GPO to this scope</label>
+            <div class="toolbar" style="margin:4px 0">
+                <select @bind="linkGpoId" class="grow">
+                    <option value="">— select GPO —</option>
+                    @foreach (var g in gpos ?? Enumerable.Empty<GpoSummary>())
+                    {
+                        <option value="@g.Id">@g.DisplayName</option>
+                    }
+                </select>
+                <button class="primary" @onclick="Link" disabled="@string.IsNullOrEmpty(linkGpoId)">Link</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<GpoSummary>? gpos;
+    private List<GpoLink>? links;
+    private List<GpoLink> allLinks = new();
+    private List<AdOuNode>? ous;
+    private string scopeDn = "";
+    private string linkGpoId = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        scopeDn = Ui.BaseDn;
+        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
+        await ReloadAll();
+    }
+
+    private async Task ReloadAll()
+    {
+        try
+        {
+            gpos = (await Gpo.ListGposAsync()).ToList();
+            allLinks = (await Gpo.ListAllLinksAsync()).ToList();
+            await LoadLinks();
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task LoadLinks()
+    {
+        try { links = (await Gpo.ListLinksAsync(scopeDn)).ToList(); }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private int LinkedCount(string gpoId) => allLinks.Count(l => l.GpoId.Equals(gpoId, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    private async Task Link()
+    {
+        Show(await Mgmt.LinkAsync(await Actor(), scopeDn, linkGpoId));
+        linkGpoId = "";
+        await ReloadAll();
+    }
+
+    private async Task Unlink(string gpoId)
+    {
+        Show(await Mgmt.UnlinkAsync(await Actor(), scopeDn, gpoId));
+        await ReloadAll();
+    }
+
+    private async Task SetOptions(GpoLink link, bool enforced, bool enabled)
+    {
+        Show(await Mgmt.SetLinkOptionsAsync(await Actor(), scopeDn, link.GpoId, enforced, enabled));
+        await ReloadAll();
+    }
+
+    private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Saved." : ("Error: " + r.Message); }
+
+    private static string Indent(int d) => new string(' ', d * 3);
+}

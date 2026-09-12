@@ -45,6 +45,11 @@ else
 }
 builder.Services.AddScoped<AdManagementService>();
 
+// Group Policy (чтение GPO + управление линками gPLink через LDAP; без GPMC).
+builder.Services.AddScoped<IGpoDirectory, GpoDirectory>();
+builder.Services.AddScoped<IGpoService, GpoService>();
+builder.Services.AddScoped<GpoManagementService>();
+
 // Exchange (remote PowerShell; сервер в лабе не поднят — операции вернут ошибку, пока не сконфигурирован).
 var exOpt = builder.Configuration.GetSection("Exchange").Get<ExchangeOptions>() ?? new ExchangeOptions();
 builder.Services.AddSingleton(exOpt);
