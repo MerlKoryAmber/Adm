@@ -24,9 +24,13 @@
 - **Пополевые права в ролях** (модель ADManager): роль хранит `CreateUserFields`/`ModifyUserFields` (ключи FieldCatalog; пусто = все поля — обратная совместимость). UI роли — `FieldPicker` под галками CreateUser/ModifyAttributes. Enforcement UI+сервер: `RbacEngine.AllowedFieldsAsync` → `FieldPermission`; `AdManagementService` отклоняет запрещённые поля (attrs, multi-value, logon hours, primary group) с аудитом; формы Create/Modify скрывают запрещённые поля. Тесты: RbacEngineTests 10/10 (вкл. пополевые + round-trip стора).
 - **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
+## Сделано в сессии 2026-09-13
+- **Пополевые права в ролях** (Delegation): CreateUserFields/ModifyUserFields, FieldPicker, enforcement UI+сервер, 10 тестов. Подписи permission человекочитаемые + группировка/алфавит; «Modify users»/«Create user» как в Management.
+- **Settings-пиллар** (новая верхняя вкладка, из `wip/settings-password-notifier` cherry-pick 4 файла + достройка): `/settings` (SMTP + политика), `/password-expiry` (список истекающих + ручной прогон). `PasswordExpiryNotifier` (BackgroundService, ежедневно RunHourMsk МСК). DI в Program.cs. Проверено на живом деплое (AD-запрос expiry отработал). SMTP-рассылка вживую не гонялась (нет тест-адресатов/relay).
+
 ## Отложено (WIP-ветки на GitHub, НЕ собираются целиком — доделать)
-- `wip/settings-password-notifier` — Settings-пиллар + напоминатель истечения пароля по SMTP (готовы модели/стор/sender/expiry-service; нет BackgroundService, страниц Settings/PasswordExpiry, верхних табов, DI).
 - `wip/inactive-report` — inactive-отчёт (частично) + экспорт членов группы + member-of viewer.
+- **DPAPI для SmtpSettings.Password** — сейчас в App_Data открытым текстом (как StoredCredential); до прода.
 Подробности — `docs/handoff/TODO.md`.
 
 ## Открытое / блокеры (в TODO)

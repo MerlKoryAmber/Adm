@@ -112,6 +112,15 @@ builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationScheduler>());
 
+// Settings + напоминатель истечения пароля (SMTP).
+var settingsPath = builder.Configuration["Settings:FilePath"]
+                   ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "app-settings.json");
+builder.Services.AddSingleton<ISettingsStore>(new FileSettingsStore(settingsPath));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IPasswordExpiryService, PasswordExpiryService>();
+builder.Services.AddSingleton<PasswordExpiryNotifier>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PasswordExpiryNotifier>());
+
 // Blazor Server.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 

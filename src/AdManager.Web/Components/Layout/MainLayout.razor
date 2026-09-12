@@ -11,6 +11,7 @@
             <a class="tab @(Section == "Reports" ? "active" : null)" href="reports">Reports</a>
             <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a>
             <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a>
+            <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a>
         </nav>
         <div class="topright">
             <span class="domainchip">Domain: @Ui.Domain</span>
@@ -72,6 +73,12 @@
                 <div class="treegroup">Automation</div>
                 <NavLink class="treeitem" href="automation" Match="NavLinkMatch.All">Policies</NavLink>
             }
+            else if (Section == "Settings")
+            {
+                <div class="treegroup">Settings</div>
+                <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">General &amp; SMTP</NavLink>
+                <NavLink class="treeitem" href="password-expiry">Password expiry</NavLink>
+            }
         </aside>
 
         <main class="content">
@@ -89,6 +96,7 @@
             if (p.StartsWith("reports")) return "Reports";
             if (p.StartsWith("delegation")) return "Delegation";
             if (p.StartsWith("automation")) return "Automation";
+            if (p.StartsWith("settings") || p.StartsWith("password-expiry")) return "Settings";
             return "Management";
         }
     }

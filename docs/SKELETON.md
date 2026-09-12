@@ -36,6 +36,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
 - `IOperationalCredentialProvider` (+ `ConfiguredCredentialProvider`) — gMSA / StoredCredential.
 - `IAutomationScheduler` (+ `AutomationScheduler`), `IAutomationStore` (+ `FileAutomationStore`).
+- `ISettingsStore` (+ `FileSettingsStore`) — рантайм-настройки (`AppSettings`: `SmtpSettings` + `PasswordExpiryPolicy`). `IEmailSender` (+ `SmtpEmailSender`), `IPasswordExpiryService` (+ `PasswordExpiryService`). Фоновый `PasswordExpiryNotifier` (BackgroundService) — ежедневная рассылка. `Notifications.cs`.
 - `IUserTemplateStore` (+ `FileUserTemplateStore`) — шаблоны формы пользователя (Layout View). Модель: `UserTemplate` (Name/Kind/Description/`Tabs`), `TemplateTab` (Title + `List<TemplateField>`), `TemplateField` (Key/Default/Required/Naming); каталог `FieldCatalog` (`FieldDef` Key/Label/Category + IsSpecial/IsBool/SupportsNaming), `NamingRules` (авто-логон/UPN/display), `TemplateDefaults` (Create/Modify). `Templates.cs`.
 
 Сервисы-обёртки (RBAC + двухфазный аудит вокруг каждой операции):
@@ -61,6 +62,8 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/gpo` | Group Policy: список GPO (версия/статус/линки) + управление линками по scope (link/unlink/enforce/enable). |
 | `/delegation` | Roles / Scopes / Assignments (реальный RBAC). |
 | `/automation` | Автоматизации (cron МСК, create/enable/trigger/delete). |
+| `/settings` | Settings-пиллар: SMTP + политика напоминаний об истечении пароля (`ISettingsStore`/`FileSettingsStore`, App_Data/app-settings.json). |
+| `/password-expiry` | Список истекающих паролей (`IPasswordExpiryService`, msDS-UserPasswordExpiryTimeComputed) + ручной прогон рассылки. Фоновый `PasswordExpiryNotifier` (BackgroundService, ежедневно в RunHourMsk). |
 | `/audit` | Журнал операций (МСК, attempt+result). |
 | `/reports` | Reports: All/Disabled/Locked-out/Without email/Without manager/Password never expires + фильтр/пагинация + CSV-экспорт. |
 

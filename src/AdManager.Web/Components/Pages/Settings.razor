@@ -1,0 +1,105 @@
+@page "/settings"
+@inject ISettingsStore Store
+
+<PageTitle>Settings — admanager</PageTitle>
+<h1>Settings</h1>
+<p class="subtitle">Runtime settings for outgoing email and password-expiry reminders. Stored in App_Data (lab).</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+@if (model is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="panel" style="max-width:640px">
+        <h3>SMTP</h3>
+        <label>Host</label>
+        <input type="text" @bind="model.Smtp.Host" placeholder="smtp.contoso.com" />
+        <div class="hint">SMTP server host name used to send reminder emails.</div>
+
+        <div class="grid2">
+            <div>
+                <label>Port</label>
+                <input type="number" @bind="model.Smtp.Port" placeholder="25" />
+                <div class="hint">Typically 25, 465 (SSL) or 587 (STARTTLS).</div>
+            </div>
+            <div>
+                <div class="checkbox" style="margin-top:26px"><input type="checkbox" id="ssl" @bind="model.Smtp.UseSsl" /><label for="ssl">Use SSL/TLS</label></div>
+            </div>
+        </div>
+
+        <label>From address</label>
+        <input type="text" @bind="model.Smtp.From" placeholder="it-noreply@contoso.com" />
+        <div class="hint">Sender shown on reminder emails.</div>
+
+        <div class="grid2">
+            <div>
+                <label>User (optional)</label>
+                <input type="text" @bind="model.Smtp.User" placeholder="leave empty for anonymous relay" />
+                <div class="hint">SMTP auth user, if the relay requires it.</div>
+            </div>
+            <div>
+                <label>Password (optional)</label>
+                <input type="password" @bind="model.Smtp.Password" />
+                <div class="hint">Lab: stored in App_Data (gitignored). Production: DPAPI (see TODO).</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-top:16px">
+        <h3>Password-expiry reminders</h3>
+        <div class="checkbox"><input type="checkbox" id="en" @bind="model.PasswordExpiry.Enabled" /><label for="en">Enable daily reminders</label></div>
+        <div class="hint">When enabled, a daily job emails users whose AD password is about to expire.</div>
+
+        <label>Days before expiry</label>
+        <input type="text" @bind="daysBeforeText" placeholder="7, 3, 1" />
+        <div class="hint">Comma-separated. A user is emailed on each of these day counts before expiry.</div>
+
+        <label>Run hour (MSK)</label>
+        <input type="number" @bind="model.PasswordExpiry.RunHourMsk" placeholder="8" />
+        <div class="hint">Hour of day (0–23, MSK) the daily job runs.</div>
+
+        <label>Subject</label>
+        <input type="text" @bind="model.PasswordExpiry.Subject" />
+        <div class="hint">Placeholders: {name}, {days}, {date}.</div>
+
+        <label>Body</label>
+        <textarea rows="6" style="width:100%" @bind="model.PasswordExpiry.Body"></textarea>
+        <div class="hint">Placeholders: {name}, {days}, {date}.</div>
+    </div>
+
+    <div class="btnrow" style="margin-top:16px;max-width:640px">
+        <button class="primary" @onclick="Save">Save settings</button>
+    </div>
+}
+
+@code {
+    private AppSettings? model;
+    private string daysBeforeText = "";
+    private string? banner; private bool ok;
+
+    protected override async Task OnInitializedAsync()
+    {
+        model = await Store.LoadAsync();
+        daysBeforeText = string.Join(", ", model.PasswordExpiry.DaysBefore);
+    }
+
+    private async Task Save()
+    {
+        if (model is null) return;
+        model.PasswordExpiry.DaysBefore = daysBeforeText
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var n) ? n : -1)
+            .Where(n => n >= 0)
+            .Distinct()
+            .OrderByDescending(n => n)
+            .ToList();
+        try { await Store.SaveAsync(model); ok = true; banner = "Settings saved."; }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+}

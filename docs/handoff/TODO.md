@@ -1,6 +1,6 @@
 # TODO / трекер хвостов
 
-Обновлено: 2026-09-11 МСК. Заводится по §3 (≥2 пунктов — в трекер) и по итогам ревью.
+Обновлено: 2026-09-13 МСК. Заводится по §3 (≥2 пунктов — в трекер) и по итогам ревью.
 
 ## Хвосты Фазы 0 (из независимого ревью)
 
@@ -33,7 +33,7 @@
 
 | Задача | Статус | Ветка | Готово / Осталось |
 |--------|--------|-------|--------------------|
-| **Settings-пиллар + напоминатель истечения пароля по почте** (новая верхняя вкладка) | ОТЛОЖЕНО | `wip/settings-password-notifier` | Готово: модели/контракты (`Notifications.cs`), `FileSettingsStore`, `SmtpEmailSender`, `PasswordExpiryService` (msDS-UserPasswordExpiryTimeComputed). Осталось: `PasswordExpiryNotifier` (BackgroundService), `Settings.razor`, `PasswordExpiry.razor`, верхние табы в `MainLayout`, DI в `Program.cs`. **Без этого не собирается.** |
+| **Settings-пиллар + напоминатель истечения пароля по почте** | **СДЕЛАНО** (сессия 2026-09-13) | merged в `feature/ad-full-management` | Cherry-pick 4 файлов из wip + дописаны `PasswordExpiryNotifier`, `Settings.razor`, `PasswordExpiry.razor`, табы, DI. Задеплоено. Осталось до прода: DPAPI для SMTP-пароля; SMTP-рассылка вживую не верифицирована (нет relay/адресатов). Ветку `wip/settings-password-notifier` можно удалить (устарела). |
 | **AD quick-wins: inactive-отчёт / экспорт членов группы / member-of** | ОТЛОЖЕНО | `wip/inactive-report` | Готово частично: метод `IAdDirectory`+`AdDirectory` для `lastLogonTimestamp`, начало отчёта в `Reports.razor`. Осталось: доделать отчёт (ReportDef/catalog/CSV), + Export members CSV на `Groups.razor`, + «Member of» на `ModifyUser.razor`. **Не завершено/не собрано.** |
 
 Backlog-фичи целиком — в `docs/feature-backlog.md`.
