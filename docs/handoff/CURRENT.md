@@ -1,65 +1,39 @@
 # CURRENT — текущее состояние
 
-Обновлено: 2026-09-11 МСК.
+Обновлено: 2026-09-12 МСК.
 
-## Статус
+## Кратко
+- Ветка `feature/ad-full-management` = `main` = **`326671f`**, запушены на GitHub (`MerlKoryAmber/Adm`). Рабочее дерево чистое.
+- Задеплоено в IIS: `http://localhost:8080` (Windows Auth, логин `Merl.loc\merl`, пароль в `.env`). Сборка 0/0. Тесты: Domain 2/2, Integration 9/9 (live AD + RBAC + EF-аудит).
+- Адаптеры — **не заглушки**: AD/GPO реальные и проверены вживую; Exchange код-комплит, **рантайм не верифицирован** (нет сервера).
+- Статус: РЕАЛИЗОВАНО НО НЕ ПРИНЯТО (приёмка человеком, §19). UI-проверки делал автор (не независимый), тесты зелёные, был независимый code-review (находки R1–R8 — часть исправлена, часть в трекере).
 
-Создан **скелет** проекта admanager. Тела адаптеров AD/Exchange/Data/Automation — заглушки (`NotImplementedException`). **Скелет собран и верифицирован:** `dotnet build` — 0 warning / 0 error; смоук-тесты — 2/2 Passed. Пакеты подняты до 8.0.31 (закрыта NU1903 в Negotiate).
+## Как запускать/деплоить
+- Dev (без auth): `ASPNETCORE_URLS=http://localhost:<port>`, `ADMGR_DEV_NOAUTH=1`, `ADMGR_AUDIT=File`, `dotnet run --no-launch-profile`. Health: `/health`.
+- Deploy: `dotnet publish -c Release -o publish` → `.env` в publish → **elevated** `build/install-iis-site.ps1` (гасит пул до копирования — без зависаний).
+- Навигация по коду — **Graphify** (`graphify query/explain/god-nodes`), strict-режим + git-хуки активны. Карта — `docs/architecture-map.md`, `docs/SKELETON.md`.
 
-## Окружение (2026-09-11 МСК)
+## Сделано в сессии 2026-09-12 (сверх ночи 11-го)
+- **Матрица атрибутов пользователя ADUC — покрыта**: General; Account (UAC-флаги: PNE, must-change, reversible-enc, smartcard, not-delegated, DES-only, no-preauth, cannot-change [UAC 0x40, оговорка ниже]) + **Logon Hours** (7×24); Address + **Country** (c/co/countryCode одним селектором); Telephones + **Other… multi-valued**; Organization; Profile + **Home folder** (Local/Connect); **Member Of** + **Primary Group**. Менеджер/managedBy — пикеры по имени. **DN в UI не показываются.**
+- **Form templates**: Layout-редактор (`/templates`,`/templates/edit`) — Field Tray, вкладки, per-field default/required/**auto-naming**; подключены к `/users/create` и `/users/modify` (селектор Layout template).
+- **Reports** (`/reports`): реальные отчёты + фильтр/пагинация + CSV-экспорт; открытие отчёта по `?r=<key>`.
+- **Group Policy — новый пиллар** (`/gpo`): список GPO + управление линками (gPLink: link/unlink/enforce/enable), RBAC+аудит (`Permission.ManageGpoLinks`).
+- **Exchange — права ящиков**: Full Access / Send As / Send on Behalf (`Permission.ManageMailboxPermissions`). Рантайм не верифицирован.
+- **Меню/навигация**: контекстное левое дерево по вкладкам + активная вкладка по маршруту; единый паттерн **Modify/Create** для Groups/Computers/OU/Contacts; управление Groups/Computers — на отдельных страницах `/{groups,computers}/modify?dn=` (не инлайн). Фильтры списков унифицированы (без OU-фильтра; в Users — Locked/Disabled/Hide disabled).
+- **Delegation**: выбор субъекта **по имени** с авто-резолвом SID (`IAdDirectory.GetSidAsync`, `RoleAssignment.SubjectName`); модель остаётся SID-based.
+- **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
-- Машина разработки **в домене `Merl.loc`**; сессия пока под локальной УЗ `desktop-pmqne78\merlkory` (для SSO/gMSA нужен вход доменной УЗ или запуск процесса под доменной).
-- **.NET 8 SDK 8.0.425** (user scope, `%LOCALAPPDATA%\Microsoft\dotnet`, в PATH). `git` есть. `winget` в системе отсутствует.
-- **PowerShell 7.6.6** — портативно (`%LOCALAPPDATA%\Microsoft\powershell7`).
-- **IIS** включён (роль + Windows Authentication, ISAPI, mgmt console), W3SVC Running. **ASP.NET Core 8 Hosting Bundle** — ANCM v2 + runtime 8.0.31.
-- **SQL Server 2022 LocalDB** (`MSSQLLocalDB`, v16.0.1000.6) — подключение проверено (`(localdb)\MSSQLLocalDB`).
-- Скрипты установки: `build/install-server.ps1` (IIS+Hosting), `build/install-localdb.ps1` (LocalDB). UAC на машине выключен.
-- Для лабы разрешено ходить под мощной доменной УЗ; пароль — только в `.env` (не в git).
+## Отложено (WIP-ветки на GitHub, НЕ собираются целиком — доделать)
+- `wip/settings-password-notifier` — Settings-пиллар + напоминатель истечения пароля по SMTP (готовы модели/стор/sender/expiry-service; нет BackgroundService, страниц Settings/PasswordExpiry, верхних табов, DI).
+- `wip/inactive-report` — inactive-отчёт (частично) + экспорт членов группы + member-of viewer.
+Подробности — `docs/handoff/TODO.md`.
 
-## Лаба развёрнута (2026-09-11 МСК)
+## Открытое / блокеры (в TODO)
+- **Exchange на живом сервере** и **gMSA на domain-joined хосте** — код есть, проверка за инфраструктурой пользователя.
+- EF-миграция файловых сторов (RBAC/Automation/Templates/Settings), RBAC **group-scope**, **R6** серверная LDAP-пагинация (сейчас весь домен в память), DPAPI для StoredCredential/SMTP-пароля, hash-chain для файлового аудита.
+- **cannot-change-password**: пишется UAC-битом `0x40`, а в AD это ACL — эффект ограничен; корректный ACL-вариант не сделан.
 
-- DC `dc-01.Merl.loc` (192.168.0.175), связь и креды `merl` проверены. Инвентарь — [docs/lab.md](../lab.md).
-- Создано `OU=AdManagerLab` (Users/Groups/ServiceAccounts) + `test.user1`, `test.user2` (enabled), группа `HelpDesk-L1`. Скрипт `build/lab-setup.ps1` (идемпотентный).
-- **Проверено вживую:** сброс пароля через `System.DirectoryServices` + `AuthenticationTypes.Secure` работает без LDAPS → Фаза 0 (AD) разблокирована.
-
-## Решение по языку (2026-09-11 МСК)
-
-UI приложения — **английский** + полная поддержка Unicode (кириллические УЗ). Чат/docs/коммиты — русский. Зафиксировано в `CLAUDE.md` (специфика).
-
-## Итог за ночь 2026-09-11 МСК
-
-**Развёрнуто и работает в IIS** (`http://localhost:8080`, Windows Auth; логин `Merl.loc\merl`, пароль в `.env`). Тесты 11/11, build 0/0.
-
-Пиллары:
-- **AD-управление** (полный набор ADManager): users/groups/computers/OUs/contacts — create/rename/move/delete/enable-disable/attrs/account-options/membership + bulk. Live-проверено (5 интеграционных тестов + браузер).
-- **Делегирование (RBAC)** — реальный движок (роли→scope→назначения, супер-админы, Domain Admins bypass), UI `/delegation`, стор `FileRbacStore`. 4 юнит-теста.
-- **Automation** — планировщик (BackgroundService + NCrontab, cron МСК), UI `/automation`, задача DisableInactiveUsers, стор `FileAutomationStore`.
-- **Exchange** — код-комплит (remote PS), UI `/exchange`. **Не верифицирован** (нет сервера) — см. TODO.
-
-UI: макет ADManager Plus, тёмная тема squid-panel (ADR-0003), `color-scheme: dark`.
-
-Тулчейн на машине: .NET 8 SDK, PS7, IIS+Hosting Bundle, SQL 2022 LocalDB.
-
-Открытое — `docs/handoff/TODO.md` (Exchange-верификация, EF-сторы, group-scope, reports, bulk-CSV, gMSA, DPAPI).
-
-Статус пилларов: РЕАЛИЗОВАНО НО НЕ ПРИНЯТО (приёмка — человеком, §19).
-
-## Сделано
-
-- `CLAUDE.md` (22 правила + специфика admanager).
-- Docs: `SKELETON.md`, `architecture.md`, `operations-model.md`, `adr/README.md`, этот файл.
-- Слои: Domain (сущности, `Permission`), Application (интерфейсы-контракты), Infrastructure.{Ad,Exchange,Data,Automation} (заглушки), Web (Program.cs, health), Domain.Tests (smoke).
-- `Directory.Build.props`, `.editorconfig`, `.gitignore`, `build/init.ps1`.
-
-## Не сделано / следующее
-
-1. ~~SDK + сборка скелета~~ — сделано (2026-09-11 МСК).
-2. ~~**Фаза 0 (AD-срез):** реальный `ResetPassword` + аудит, live-проверка~~ — **сделано, ревью (§4) пройдено, major-замечания закрыты/занесены в трекер**. Статус: РЕАЛИЗОВАНО НО НЕ ПРИНЯТО (ждёт приёмки человеком, §19). Отчёт — `docs/agent_reports/phase0/REPORT.md`; хвосты — `docs/handoff/TODO.md`.
-3. Согласовать список `Permission` (операции MVP) — можно параллельно.
-4. SQL LocalDB для аудита/данных (к моменту, когда пишем в БД).
-5. Blazor-компоненты (App/Routes/страницы), EF-миграции, DI-регистрации в Web.
-
-## Заметки
-
-- Git-репозиторий ещё не инициализирован.
-- Ветвление/коммиты/push — по §6, по команде человека.
+## Окружение (без изменений с 11-го)
+- DC `dc-01.Merl.loc` (192.168.0.175), OU `AdManagerLab` (test.user1/2, группа HelpDesk-L1). Инвентарь — `docs/lab.md`.
+- .NET 8 SDK (user scope), IIS + ASP.NET Core 8 Hosting Bundle, SQL 2022 LocalDB. `uv` + `graphifyy` (для Graphify) в `~/.local/bin`.
+- Секреты — только в `.env` (gitignored). `App_Data/` (файловые сторы, граф `graphify-out/`) — gitignored.
