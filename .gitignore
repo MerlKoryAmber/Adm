@@ -14,6 +14,10 @@ publish/
 # Runtime data (файловые сторы: rbac/automation/шаблоны/аудит)
 **/App_Data/
 
+# graphify (граф генерируется локально: graphify update . / хук; конфиг и скилл — в git)
+graphify-out/
+.claude/worktrees/
+
 # Secrets / config
 .env
 *.env
