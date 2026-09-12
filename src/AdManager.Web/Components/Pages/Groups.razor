@@ -2,6 +2,7 @@
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
 @inject UiOptions Ui
+@inject NavigationManager Nav
 
 <PageTitle>Group Management — admanager</PageTitle>
 <h1>Group Management</h1>
@@ -24,6 +25,7 @@
         </select>
     </label>
     <span class="grow"></span>
+    <button @onclick='() => Nav.NavigateTo("groups/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
 </div>
 
@@ -96,8 +98,7 @@ else
     </div>
 }
 
-<div class="layout2" style="margin-top:16px">
-    <div class="panel">
+<div class="panel" style="margin-top:16px">
         @if (sel is null) { <p class="muted">Select a group (Manage ▸) to manage.</p> }
         else
         {
@@ -162,28 +163,6 @@ else
                 <div class="btnrow"><button class="danger" @onclick="Delete">Yes, delete</button><button @onclick="() => confirmDelete = false">Cancel</button></div>
             }
         }
-    </div>
-
-    <div class="panel">
-        <h3>Create group</h3>
-        <label>SAM account name</label><input type="text" @bind="ngSam" placeholder="Sales-Team" />
-        <div class="hint">Pre-Windows 2000 account name for the group.</div>
-        <label>Name</label><input type="text" @bind="ngName" placeholder="Sales Team" />
-        <div class="hint">Display name shown in the directory.</div>
-        <label>Scope</label>
-        <select @bind="ngScope">
-            <option value="Global">Global</option>
-            <option value="DomainLocal">Domain local</option>
-            <option value="Universal">Universal</option>
-        </select>
-        <label>Type</label>
-        <select @bind="ngKind">
-            <option value="Security">Security</option>
-            <option value="Distribution">Distribution</option>
-        </select>
-        <div class="hint">Created in the selected OU.</div>
-        <div class="btnrow"><button class="primary" @onclick="CreateGroup" disabled="@(string.IsNullOrWhiteSpace(ngSam) || string.IsNullOrWhiteSpace(ngName))">Create group</button></div>
-    </div>
 </div>
 
 @code {
@@ -197,7 +176,6 @@ else
     private AdGroupSummary? sel;
     private readonly HashSet<string> selected = new();
     private string search = "", ouDn = "", addDn = "", renameTo = "", moveTo = "", bulkMoveTo = "";
-    private string ngSam = "", ngName = "", ngScope = "Global", ngKind = "Security";
     private string gDesc = "", gMail = "", gManagedBy = "", gInfo = "";
     private int page;
     private string? banner; private bool ok; private bool confirmDelete; private bool confirmBulkDelete;
@@ -282,14 +260,6 @@ else
     private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"CN={renameTo}")); await Load(); }
     private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Load(); }
     private async Task Delete() { Show(await Mgmt.DeleteObjectAsync(await Actor(), sel!.Dn)); confirmDelete = false; sel = null; await Load(); }
-
-    private async Task CreateGroup()
-    {
-        var scope = Enum.Parse<GroupScope>(ngScope);
-        var kind = Enum.Parse<GroupKind>(ngKind);
-        Show(await Mgmt.CreateGroupAsync(await Actor(), new CreateGroupRequest(ouDn, ngSam.Trim(), ngName.Trim(), scope, kind)));
-        ngSam = ""; ngName = ""; await Load();
-    }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
     private static string Indent(int d) => new string(' ', d * 3);
