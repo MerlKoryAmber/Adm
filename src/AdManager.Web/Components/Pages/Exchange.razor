@@ -80,7 +80,7 @@ else
         else
         {
             <div class="panelhead"><h3>@sel.DisplayName</h3><button class="linkbtn" @onclick="() => sel = null">close</button></div>
-            <p class="hint">@sel.Dn</p>
+            <p class="hint">@sel.SamAccountName</p>
             <label>Alias (optional)</label>
             <input type="text" @bind="alias" placeholder="j.doe" />
             <div class="hint">Mailbox alias; leave empty to keep the default.</div>

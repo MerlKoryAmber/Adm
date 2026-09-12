@@ -37,6 +37,9 @@ else
         <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=pne")' style="cursor:pointer;padding:14px">
             <div class="hint">Password never expires</div><div style="font-size:28px;font-weight:600">@userPne</div>
         </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=noemail")' style="cursor:pointer;padding:14px">
+            <div class="hint">Users without email</div><div style="font-size:28px;font-weight:600">@userNoEmail</div>
+        </div>
         <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("groups")' style="cursor:pointer;padding:14px">
             <div class="hint">Groups</div><div style="font-size:28px;font-weight:600">@groupTotal</div>
         </div>
@@ -93,7 +96,7 @@ else
     private bool loading = true;
     private string? banner;
 
-    private int userTotal, userDisabled, userLocked, userPne, groupTotal, computerTotal, ouTotal, expiringSoon;
+    private int userTotal, userDisabled, userLocked, userPne, userNoEmail, groupTotal, computerTotal, ouTotal, expiringSoon;
     private IReadOnlyList<ExpiringUser> topExpiring = new List<ExpiringUser>();
     private IReadOnlyList<AuditEntry> recent = new List<AuditEntry>();
 
@@ -107,6 +110,7 @@ else
             userTotal = users.Count;
             userDisabled = users.Count(u => !u.Enabled);
             userLocked = users.Count(u => u.LockedOut);
+            userNoEmail = users.Count(u => string.IsNullOrWhiteSpace(u.Mail));
 
             groupTotal = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).Count;
             computerTotal = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).Count;

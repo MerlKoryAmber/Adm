@@ -4,9 +4,9 @@
 @inject UiOptions Ui
 @inject NavigationManager Nav
 
-<PageTitle>OU Management — admanager</PageTitle>
-<h1>OU Management</h1>
-<p class="subtitle">Base: <code>@Ui.BaseDn</code></p>
+<PageTitle>Modify OUs — admanager</PageTitle>
+<h1>Modify OUs</h1>
+<p class="subtitle">Organizational units under the managed domain.</p>
 
 @if (banner is not null)
 {
@@ -20,13 +20,12 @@
         else
         {
             <table>
-                <thead><tr><th>Name</th><th>DN</th></tr></thead>
+                <thead><tr><th>Name</th></tr></thead>
                 <tbody>
                     @foreach (var o in ous)
                     {
                         <tr class="selectable @(sel?.Dn == o.Dn ? "selected" : null)" @onclick="() => Select(o)">
                             <td>@Indent(o.Depth)@o.Name</td>
-                            <td style="word-break:break-all">@o.Dn</td>
                         </tr>
                     }
                 </tbody>
@@ -40,7 +39,6 @@
         else
         {
             <h3>@sel.Name</h3>
-            <p class="hint">@sel.Dn</p>
 
             <label>Rename (new OU name)</label>
             <input type="text" @bind="renameTo" />
