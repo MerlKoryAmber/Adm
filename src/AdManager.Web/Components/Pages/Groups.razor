@@ -14,16 +14,6 @@
 
 <div class="toolbar">
     <input class="searchbox" type="text" placeholder="Search name / account…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
-    <label class="chkinline">
-        OU:
-        <select @bind="ouDn" @bind:after="Load" style="max-width:220px">
-            <option value="@Ui.BaseDn">(domain root)</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
-    </label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("groups/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
@@ -190,7 +180,7 @@ else
 
     private async Task Load()
     {
-        try { groups = (await Dir.ListGroupsAsync(ouDn, subtree: true)).ToList(); sel = null; members = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
+        try { groups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList(); sel = null; members = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
 

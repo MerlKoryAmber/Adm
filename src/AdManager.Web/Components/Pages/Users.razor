@@ -16,6 +16,7 @@
     <input class="searchbox" type="text" placeholder="Search name / account / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
     <label class="chkinline"><input type="checkbox" @bind="onlyLocked" @bind:after="() => page = 0" /> Locked only</label>
     <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
+    <label class="chkinline"><input type="checkbox" @bind="hideDisabled" @bind:after="() => page = 0" /> Hide disabled</label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("users/create")'>+ Create</button>
     <button @onclick='() => Nav.NavigateTo("users/bulk")'>Bulk CSV</button>
@@ -108,7 +109,7 @@ else
     private List<AdUserSummary>? users;
     private readonly HashSet<string> selected = new();
     private string search = "", bulkPwd = "", bulkMoveTo = "";
-    private bool onlyLocked, onlyDisabled;
+    private bool onlyLocked, onlyDisabled, hideDisabled;
     private int page;
     private string? banner; private bool ok; private bool confirmBulkDelete;
 
@@ -131,6 +132,7 @@ else
         var q = users!.AsEnumerable();
         if (onlyLocked) q = q.Where(u => u.LockedOut);
         if (onlyDisabled) q = q.Where(u => !u.Enabled);
+        if (hideDisabled) q = q.Where(u => u.Enabled);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var t = search.Trim();

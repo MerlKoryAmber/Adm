@@ -15,16 +15,6 @@
 <div class="toolbar">
     <input class="searchbox" type="text" placeholder="Search name / OS…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
     <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
-    <label class="chkinline">
-        OU:
-        <select @bind="ouDn" @bind:after="Load" style="max-width:220px">
-            <option value="@Ui.BaseDn">(domain root)</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
-    </label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("computers/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
@@ -171,7 +161,7 @@ else
 
     private async Task Load()
     {
-        try { items = (await Dir.ListComputersAsync(ouDn, subtree: true)).ToList(); sel = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
+        try { items = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).ToList(); sel = null; selected.Clear(); confirmBulkDelete = false; page = 0; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
 
