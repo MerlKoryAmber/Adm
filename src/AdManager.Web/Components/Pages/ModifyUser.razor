@@ -105,6 +105,7 @@ else
     private readonly List<TemplateTab> defaultLayout = TemplateDefaults.Modify();
 
     private Dictionary<string, string?>? model;
+    private Dictionary<string, string?> original = new(StringComparer.OrdinalIgnoreCase); // для dirty-tracking
     private int sel;
     private string sam = "", resetPwd = "";
     private bool pne, enabled;
@@ -117,15 +118,21 @@ else
     protected override async Task OnInitializedAsync()
     {
         if (string.IsNullOrEmpty(Dn)) { banner = "No user specified."; ok = false; return; }
-        var wanted = TextKeys.Concat(new[] { "sAMAccountName", "userAccountControl" }).ToArray();
-        var det = await Dir.GetObjectAsync(Dn, wanted);
-        model = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var k in TextKeys) model[k] = det?.Attributes.GetValueOrDefault(k);
-        sam = det?.Attributes.GetValueOrDefault("sAMAccountName") ?? "";
-        var uac = int.TryParse(det?.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
-        pne = (uac & 0x10000) != 0;
-        enabled = (uac & 0x2) == 0;
-        templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
+        try
+        {
+            var wanted = TextKeys.Concat(new[] { "sAMAccountName", "userAccountControl" }).ToArray();
+            var det = await Dir.GetObjectAsync(Dn, wanted);
+            if (det is null) { banner = "User not found (may have been moved or deleted)."; ok = false; return; }
+            model = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var k in TextKeys) model[k] = det.Attributes.GetValueOrDefault(k);
+            original = new Dictionary<string, string?>(model, StringComparer.OrdinalIgnoreCase); // снимок для dirty-tracking
+            sam = det.Attributes.GetValueOrDefault("sAMAccountName") ?? "";
+            var uac = int.TryParse(det.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
+            pne = (uac & 0x10000) != 0;
+            enabled = (uac & 0x2) == 0;
+            templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
+        }
+        catch (Exception ex) { ok = false; banner = "Error loading user: " + ex.Message; }
     }
 
     private void OnTemplateChange()
@@ -148,18 +155,22 @@ else
             .Select(f => FieldCatalog.Label(f.Key)).Distinct().ToList();
         if (miss.Count > 0) { ok = false; banner = "Required: " + string.Join(", ", miss); return; }
 
-        // Пишем только текстовые поля, присутствующие в текущей раскладке (шаблон ограничивает объём).
+        // Пишем ТОЛЬКО изменённые текстовые поля текущей раскладки (dirty-tracking):
+        // это исключает тихую перезапись невидимых/нетронутых атрибутов (в т.ч. схлопывание multi-valued).
         var layoutKeys = Layout.SelectMany(t => t.Fields).Select(f => f.Key)
             .Where(k => !FieldCatalog.IsSpecial(k)).Distinct().ToList();
         var attrs = new Dictionary<string, string?>();
         foreach (var k in layoutKeys)
         {
             var val = model!.GetValueOrDefault(k);
+            if (string.Equals(val ?? "", original.GetValueOrDefault(k) ?? "", StringComparison.Ordinal)) continue; // не менялось
             if (k == "userPrincipalName" && string.IsNullOrEmpty(val)) continue; // не очищать UPN
             attrs[k] = val;
         }
-        if (attrs.Count == 0) { ok = true; banner = "No editable attributes in this layout."; return; }
-        Show(await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs));
+        if (attrs.Count == 0) { ok = true; banner = "No changes to save."; return; }
+        var r = await Mgmt.SetAttributesAsync(await Actor(), Dn!, attrs);
+        if (r.Success) foreach (var (k, v) in attrs) original[k] = v; // новый базовый снимок
+        Show(r);
     }
 
     private async Task ToggleEnabled(ChangeEventArgs e)

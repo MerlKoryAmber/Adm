@@ -49,8 +49,7 @@ public static class FieldCatalog
         new("employeeNumber", "Employee number", "Organization"),
         new("employeeType", "Employee type", "Organization"),
         new("division", "Division", "Organization"),
-        // Exchange
-        new("proxyAddresses", "Email addresses (proxy)", "Exchange"),
+        // Exchange (только одно-значные атрибуты — proxyAddresses multi-valued, не поддерживаем в текстовой раскладке)
         new("mailNickname", "Exchange alias", "Exchange"),
         new("targetAddress", "External email (targetAddress)", "Exchange"),
         // Profile

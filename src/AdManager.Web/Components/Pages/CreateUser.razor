@@ -196,19 +196,31 @@
             if (!string.IsNullOrEmpty(v)) attrs[k] = v;
         }
 
+        // Включённый аккаунт требует пароль; иначе создаём выключенным и предупреждаем (AD отклонит enable без пароля).
+        var effectiveEnabled = enabled;
+        var note = "";
+        if (enabled && string.IsNullOrEmpty(password)) { effectiveEnabled = false; note = " (created disabled: no password provided)"; }
+
         var req = new CreateUserRequest(ouDn, sam.Trim(), display!.Trim(), upn!.Trim(),
-            InitialPassword: string.IsNullOrEmpty(password) ? null : password, Enabled: enabled, Attributes: attrs);
+            InitialPassword: string.IsNullOrEmpty(password) ? null : password, Enabled: effectiveEnabled, Attributes: attrs);
 
         var r = await Mgmt.CreateUserAsync(actor, req);
         ok = r.Success;
-        banner = r.Success ? $"User '{sam}' created." : ("Error: " + r.Message);
+        banner = r.Success ? $"User '{sam}' created.{note}" : ("Error: " + r.Message);
 
         if (r.Success && (mustChange || pwdNeverExpires))
         {
-            var dn = $"CN={display.Trim()},{ouDn}";
-            await Mgmt.SetAccountOptionsAsync(actor, dn, new AccountOptions(
-                MustChangePasswordAtNextLogon: mustChange ? true : null,
-                PasswordNeverExpires: pwdNeverExpires ? true : null));
+            // Не собираем DN строкой (CN мог быть экранирован) — находим фактический DN по sAMAccountName.
+            var found = (await Dir.SearchAsync(ouDn, sam.Trim()))
+                .FirstOrDefault(x => string.Equals(x.SamAccountName, sam.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (found is null) { ok = false; banner += " Account options NOT applied: created user not found for follow-up."; }
+            else
+            {
+                var opt = await Mgmt.SetAccountOptionsAsync(actor, found.Dn, new AccountOptions(
+                    MustChangePasswordAtNextLogon: mustChange ? true : null,
+                    PasswordNeverExpires: pwdNeverExpires ? true : null));
+                if (!opt.Success) { ok = false; banner += " Account options failed: " + opt.Message; }
+            }
         }
         if (r.Success) { sam = password = ""; model.Clear(); ApplyTemplateDefaults(); }
     }
