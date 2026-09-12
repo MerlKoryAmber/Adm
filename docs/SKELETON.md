@@ -29,7 +29,7 @@ Web ─► Infrastructure.* (DI-композиция)
 
 - `IAdService` — write-операции AD: reset password, unlock, enable/disable, create/delete user, attrs, move, rename, group membership, account options, create group/computer/contact/OU.
 - `IAdDirectory` — чтение: users/groups/computers/contacts/OU, all-OUs, объект по атрибутам, члены группы.
-- `IExchangeService` — mailbox enable/disable/props, distribution create/membership.
+- `IExchangeService` — mailbox enable/disable/props, distribution create/membership, права ящика (Full Access/Send As/Send on Behalf, `Permission.ManageMailboxPermissions`).
 - `IGpoDirectory` (+ `GpoDirectory`) — чтение GPO и линков (gPLink); `IGpoService` (+ `GpoService`) — link/unlink/enforce/enable. Обёртка `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). DTO `GpoSummary`/`GpoLink` (`Abstractions.Gpo.cs`).
 - `IRbacEngine` (+ `RbacEngine`, `AllowAllRbacEngine`) — авторизация операции.
 - `IRbacStore` (+ `FileRbacStore`) — роли/scope/назначения.
