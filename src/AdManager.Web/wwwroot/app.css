@@ -97,9 +97,10 @@ td.chk, th.chk { width: 34px; text-align: center; }
 /* Forms */
 label { display: block; font-size: 13px; margin: 10px 0 3px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
-input[type=text], input[type=password], select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 14px; background: var(--primary-dark); color: var(--text); }
-input::placeholder { color: #5c6675; }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
+input[type=text], input[type=password], input[type=number], input[type=email], input[type=search], textarea, select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 14px; background: var(--primary-dark); color: var(--text); font-family: inherit; }
+input::placeholder, textarea::placeholder { color: #5c6675; }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+select option { background: var(--primary-dark); color: var(--text); }
 .checkbox { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .checkbox label { margin: 0; }
 
