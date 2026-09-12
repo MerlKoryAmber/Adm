@@ -47,7 +47,7 @@ Web ─► Infrastructure.* (DI-композиция)
 
 | Route | Назначение |
 |-------|------------|
-| `/` Home | обзор. |
+| `/`, `/dashboard` Dashboard | Обзор домена: KPI-плитки (users/disabled/locked/expiring/PNE/groups/computers/OU, кликабельны), истекающие пароли, недавний аудит. |
 | `/users` | Users: полноширинный грид всех пользователей домена, поиск + фильтры Locked/Disabled only + пагинация (50/стр), **bulk** (enable/disable/unlock/reset pwd/move/delete), «Modify ▸» на строке. |
 | `/users/modify` | правка атрибутов (табы) + account options; **селектор Layout template** (Modify-шаблоны), иначе `TemplateDefaults.Modify()`. |
 | `/users/create` | создание пользователя, табовая форма + целевой OU; **селектор Layout template** (Create-шаблоны), иначе `TemplateDefaults.Create()`. |
@@ -62,8 +62,8 @@ Web ─► Infrastructure.* (DI-композиция)
 | `/gpo` | Group Policy: список GPO (версия/статус/линки) + управление линками по scope (link/unlink/enforce/enable). |
 | `/delegation` | Roles / Scopes / Assignments (реальный RBAC). |
 | `/automation` | Автоматизации (cron МСК, create/enable/trigger/delete). |
-| `/settings` | Settings-пиллар: SMTP + политика напоминаний об истечении пароля (`ISettingsStore`/`FileSettingsStore`, App_Data/app-settings.json). |
-| `/password-expiry` | Список истекающих паролей (`IPasswordExpiryService`, msDS-UserPasswordExpiryTimeComputed) + ручной прогон рассылки. Фоновый `PasswordExpiryNotifier` (BackgroundService, ежедневно в RunHourMsk). |
+| `/settings` | Settings: SMTP + HTTPS/сертификаты (`ISettingsStore`/`FileSettingsStore`, App_Data/app-settings.json). |
+| `/password-expiry` | Отдельная верхняя вкладка: политика (`PasswordExpiryPolicy` + `ExpiryTrigger[]` — несколько порогов, свой текст на каждый) + список истекающих + ручной прогон. Фоновый `PasswordExpiryNotifier` (BackgroundService, ежедневно в RunHourMsk). |
 | `/audit` | Журнал операций (МСК, attempt+result). |
 | `/reports` | Reports: All/Disabled/Locked-out/Without email/Without manager/Password never expires + фильтр/пагинация + CSV-экспорт. |
 

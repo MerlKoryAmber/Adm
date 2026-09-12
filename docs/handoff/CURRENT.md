@@ -26,7 +26,9 @@
 
 ## Сделано в сессии 2026-09-13
 - **Пополевые права в ролях** (Delegation): CreateUserFields/ModifyUserFields, FieldPicker, enforcement UI+сервер, 10 тестов. Подписи permission человекочитаемые + группировка/алфавит; «Modify users»/«Create user» как в Management.
-- **Settings-пиллар** (новая верхняя вкладка, из `wip/settings-password-notifier` cherry-pick 4 файла + достройка): `/settings` (SMTP + политика), `/password-expiry` (список истекающих + ручной прогон). `PasswordExpiryNotifier` (BackgroundService, ежедневно RunHourMsk МСК). DI в Program.cs. Проверено на живом деплое (AD-запрос expiry отработал). SMTP-рассылка вживую не гонялась (нет тест-адресатов/relay).
+- **Settings-пиллар** (из `wip/settings-password-notifier` cherry-pick 4 файла + достройка): `/settings` (SMTP + **HTTPS/сертификаты**: RequireHttps/HSTS/источник IIS|PFX|Store/порт). `PasswordExpiryNotifier` (BackgroundService, ежедневно RunHourMsk МСК). DI в Program.cs.
+- **Password Expiry** — вынесен в **отдельную верхнюю вкладку** `/password-expiry`: политика + **триггеры** (`ExpiryTrigger[]`, несколько порогов дней, свой Subject/Body на каждый) + preview-список + ручной прогон. Проверено вживую (AD expiry-запрос ок). SMTP-рассылка вживую не гонялась (нет relay).
+- **Dashboard** (`/`, `/dashboard`) — новая стартовая вкладка по образцу ADManager: KPI-плитки (users/disabled/locked/expiring≤7d/PNE/groups/computers/OU, кликабельны на Reports/страницы) + истекающие пароли + недавний аудит. Home.razor удалён (заменён дашбордом).
 
 ## Отложено (WIP-ветки на GitHub, НЕ собираются целиком — доделать)
 - `wip/inactive-report` — inactive-отчёт (частично) + экспорт членов группы + member-of viewer.

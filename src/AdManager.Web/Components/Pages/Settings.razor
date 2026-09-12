@@ -3,7 +3,7 @@
 
 <PageTitle>Settings — admanager</PageTitle>
 <h1>Settings</h1>
-<p class="subtitle">Runtime settings for outgoing email and password-expiry reminders. Stored in App_Data (lab).</p>
+<p class="subtitle">Runtime settings for outgoing email (SMTP) and HTTPS/certificates. Stored in App_Data (lab).</p>
 
 @if (banner is not null)
 {
@@ -52,25 +52,39 @@ else
     </div>
 
     <div class="panel" style="max-width:640px;margin-top:16px">
-        <h3>Password-expiry reminders</h3>
-        <div class="checkbox"><input type="checkbox" id="en" @bind="model.PasswordExpiry.Enabled" /><label for="en">Enable daily reminders</label></div>
-        <div class="hint">When enabled, a daily job emails users whose AD password is about to expire.</div>
+        <h3>HTTPS / Certificates</h3>
+        <div class="checkbox"><input type="checkbox" id="rq" @bind="model.Https.RequireHttps" /><label for="rq">Require HTTPS (redirect HTTP → HTTPS)</label></div>
+        <div class="hint">Enforce TLS for the admin portal. Applied at the web-host level.</div>
+        <div class="checkbox"><input type="checkbox" id="hsts" @bind="model.Https.UseHsts" /><label for="hsts">Enable HSTS</label></div>
+        <div class="hint">Send Strict-Transport-Security so browsers only use HTTPS. Enable only after HTTPS is verified.</div>
 
-        <label>Days before expiry</label>
-        <input type="text" @bind="daysBeforeText" placeholder="7, 3, 1" />
-        <div class="hint">Comma-separated. A user is emailed on each of these day counts before expiry.</div>
+        <label>Certificate source</label>
+        <select @bind="model.Https.CertificateSource">
+            <option value="IIS">IIS binding (managed by IIS)</option>
+            <option value="PfxFile">PFX file</option>
+            <option value="Store">Windows cert store (by thumbprint)</option>
+        </select>
+        <div class="hint">Where the TLS certificate comes from. In the IIS lab, the binding is managed in IIS Manager.</div>
 
-        <label>Run hour (MSK)</label>
-        <input type="number" @bind="model.PasswordExpiry.RunHourMsk" placeholder="8" />
-        <div class="hint">Hour of day (0–23, MSK) the daily job runs.</div>
+        @if (model.Https.CertificateSource == "PfxFile")
+        {
+            <label>PFX path</label>
+            <input type="text" @bind="model.Https.PfxPath" placeholder="C:\certs\admanager.pfx" />
+            <label>PFX password</label>
+            <input type="password" @bind="model.Https.PfxPassword" />
+            <div class="hint">Lab: stored in App_Data (gitignored). Production: DPAPI / secret store.</div>
+        }
+        else if (model.Https.CertificateSource == "Store")
+        {
+            <label>Certificate thumbprint</label>
+            <input type="text" @bind="model.Https.Thumbprint" placeholder="A1B2C3… (no spaces)" />
+            <div class="hint">SHA-1 thumbprint of a certificate in LocalMachine\My.</div>
+        }
 
-        <label>Subject</label>
-        <input type="text" @bind="model.PasswordExpiry.Subject" />
-        <div class="hint">Placeholders: {name}, {days}, {date}.</div>
+        <label>HTTPS port</label>
+        <input type="number" @bind="model.Https.HttpsPort" placeholder="443" />
 
-        <label>Body</label>
-        <textarea rows="6" style="width:100%" @bind="model.PasswordExpiry.Body"></textarea>
-        <div class="hint">Placeholders: {name}, {days}, {date}.</div>
+        <div class="banner" style="margin-top:10px">Note: certificate binding changes take effect at the web-host level (IIS site binding or Kestrel). This page stores the intended configuration.</div>
     </div>
 
     <div class="btnrow" style="margin-top:16px;max-width:640px">
@@ -80,25 +94,13 @@ else
 
 @code {
     private AppSettings? model;
-    private string daysBeforeText = "";
     private string? banner; private bool ok;
 
-    protected override async Task OnInitializedAsync()
-    {
-        model = await Store.LoadAsync();
-        daysBeforeText = string.Join(", ", model.PasswordExpiry.DaysBefore);
-    }
+    protected override async Task OnInitializedAsync() => model = await Store.LoadAsync();
 
     private async Task Save()
     {
         if (model is null) return;
-        model.PasswordExpiry.DaysBefore = daysBeforeText
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => int.TryParse(s, out var n) ? n : -1)
-            .Where(n => n >= 0)
-            .Distinct()
-            .OrderByDescending(n => n)
-            .ToList();
         try { await Store.SaveAsync(model); ok = true; banner = "Settings saved."; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }

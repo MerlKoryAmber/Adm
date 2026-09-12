@@ -7,10 +7,12 @@
     <header class="topbar">
         <div class="logo">ADManager<span>·lab</span></div>
         <nav class="tabs">
+            <a class="tab @(Section == "Dashboard" ? "active" : null)" href="dashboard">Dashboard</a>
             <a class="tab @(Section == "Management" ? "active" : null)" href="users">Management</a>
             <a class="tab @(Section == "Reports" ? "active" : null)" href="reports">Reports</a>
             <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a>
             <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a>
+            <a class="tab @(Section == "PasswordExpiry" ? "active" : null)" href="password-expiry">Password Expiry</a>
             <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a>
         </nav>
         <div class="topright">
@@ -73,11 +75,15 @@
                 <div class="treegroup">Automation</div>
                 <NavLink class="treeitem" href="automation" Match="NavLinkMatch.All">Policies</NavLink>
             }
+            else if (Section == "PasswordExpiry")
+            {
+                <div class="treegroup">Password Expiry</div>
+                <NavLink class="treeitem" href="password-expiry" Match="NavLinkMatch.All">Policy &amp; reminders</NavLink>
+            }
             else if (Section == "Settings")
             {
                 <div class="treegroup">Settings</div>
-                <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">General &amp; SMTP</NavLink>
-                <NavLink class="treeitem" href="password-expiry">Password expiry</NavLink>
+                <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">Email &amp; HTTPS</NavLink>
             }
         </aside>
 
@@ -93,10 +99,12 @@
         get
         {
             var p = Nav.ToBaseRelativePath(Nav.Uri).ToLowerInvariant();
+            if (p == "" || p.StartsWith("dashboard")) return "Dashboard";
             if (p.StartsWith("reports")) return "Reports";
             if (p.StartsWith("delegation")) return "Delegation";
             if (p.StartsWith("automation")) return "Automation";
-            if (p.StartsWith("settings") || p.StartsWith("password-expiry")) return "Settings";
+            if (p.StartsWith("password-expiry")) return "PasswordExpiry";
+            if (p.StartsWith("settings")) return "Settings";
             return "Management";
         }
     }

@@ -63,17 +63,21 @@ public sealed class PasswordExpiryNotifier : BackgroundService
         var email = sp.GetRequiredService<IEmailSender>();
         var policy = settings.PasswordExpiry;
 
-        var maxDays = policy.DaysBefore.Count > 0 ? policy.DaysBefore.Max() : 0;
+        // Триггер на каждый порог дней (первый совпавший).
+        var byDay = policy.Triggers
+            .GroupBy(t => t.DaysBefore)
+            .ToDictionary(g => g.Key, g => g.First());
+        var maxDays = byDay.Count > 0 ? byDay.Keys.Max() : 0;
         var candidates = await expiry.ListExpiringAsync(maxDays, ct);
 
         int sent = 0, skipped = 0, failed = 0;
         foreach (var u in candidates)
         {
-            if (!policy.DaysBefore.Contains(u.DaysLeft)) continue;    // шлём только в дни-триггеры
+            if (!byDay.TryGetValue(u.DaysLeft, out var trigger)) continue; // шлём только в дни-триггеры
             if (string.IsNullOrWhiteSpace(u.Mail)) { skipped++; continue; }
 
-            var subject = Fill(policy.Subject, u);
-            var body = Fill(policy.Body, u);
+            var subject = Fill(trigger.Subject, u);
+            var body = Fill(trigger.Body, u);
             var r = await email.SendAsync(u.Mail!, subject, body, ct);
             if (r.Success) sent++; else { failed++; _log.LogWarning("expiry mail to {Mail} failed: {Msg}", u.Mail, r.Message); }
         }

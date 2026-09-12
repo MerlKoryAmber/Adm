@@ -1,0 +1,140 @@
+@page "/"
+@page "/dashboard"
+@inject IAdDirectory Dir
+@inject IPasswordExpiryService Expiry
+@inject IAuditLog Audit
+@inject UiOptions Ui
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard — admanager</PageTitle>
+<h1>Dashboard</h1>
+<p class="subtitle">Domain overview for <code>@Ui.Domain</code>. Counts are read live from Active Directory.</p>
+
+@if (banner is not null)
+{
+    <div class="banner err">@banner</div>
+}
+
+@if (loading)
+{
+    <p>Loading directory overview…</p>
+}
+else
+{
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px">
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=all")' style="cursor:pointer;padding:14px">
+            <div class="hint">Users</div><div style="font-size:28px;font-weight:600">@userTotal</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=disabled")' style="cursor:pointer;padding:14px">
+            <div class="hint">Disabled users</div><div style="font-size:28px;font-weight:600">@userDisabled</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=locked")' style="cursor:pointer;padding:14px">
+            <div class="hint">Locked-out users</div><div style="font-size:28px;font-weight:600">@userLocked</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("password-expiry")' style="cursor:pointer;padding:14px">
+            <div class="hint">Passwords expiring ≤7d</div><div style="font-size:28px;font-weight:600">@expiringSoon</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("reports?r=pne")' style="cursor:pointer;padding:14px">
+            <div class="hint">Password never expires</div><div style="font-size:28px;font-weight:600">@userPne</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("groups")' style="cursor:pointer;padding:14px">
+            <div class="hint">Groups</div><div style="font-size:28px;font-weight:600">@groupTotal</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("computers")' style="cursor:pointer;padding:14px">
+            <div class="hint">Computers</div><div style="font-size:28px;font-weight:600">@computerTotal</div>
+        </div>
+        <div class="gridpanel kpi" @onclick='() => Nav.NavigateTo("ous")' style="cursor:pointer;padding:14px">
+            <div class="hint">Organizational units</div><div style="font-size:28px;font-weight:600">@ouTotal</div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
+        <div class="gridpanel" style="padding:0">
+            <div class="toolbar" style="padding:10px 12px"><strong>Passwords expiring soon</strong><span class="grow"></span><a class="linkbtn" href="password-expiry">Open ▸</a></div>
+            <div style="overflow-x:auto">
+                <table>
+                    <thead><tr><th>User</th><th>Email</th><th>Days left</th></tr></thead>
+                    <tbody>
+                        @foreach (var u in topExpiring)
+                        {
+                            <tr><td>@u.DisplayName</td><td>@(string.IsNullOrWhiteSpace(u.Mail) ? "—" : u.Mail)</td>
+                                <td><span class="badge @(u.DaysLeft <= 1 ? "warn" : "ok")">@u.DaysLeft</span></td></tr>
+                        }
+                        @if (topExpiring.Count == 0) { <tr><td colspan="3" class="muted">Nothing expiring within 7 days.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="gridpanel" style="padding:0">
+            <div class="toolbar" style="padding:10px 12px"><strong>Recent activity</strong><span class="grow"></span><a class="linkbtn" href="audit">Audit log ▸</a></div>
+            <div style="overflow-x:auto">
+                <table>
+                    <thead><tr><th>Time (MSK)</th><th>Actor</th><th>Operation</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var e in recent)
+                        {
+                            <tr>
+                                <td>@e.TimestampMsk.ToString("MM-dd HH:mm")</td>
+                                <td>@e.ActorName</td>
+                                <td>@e.Operation</td>
+                                <td>@(e.Success ? "" : "✗")</td>
+                            </tr>
+                        }
+                        @if (recent.Count == 0) { <tr><td colspan="4" class="muted">No recent operations.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private string? banner;
+
+    private int userTotal, userDisabled, userLocked, userPne, groupTotal, computerTotal, ouTotal, expiringSoon;
+    private IReadOnlyList<ExpiringUser> topExpiring = new List<ExpiringUser>();
+    private IReadOnlyList<AuditEntry> recent = new List<AuditEntry>();
+
+    private const int UF_PASSWORD_NEVER_EXPIRES = 0x10000;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var users = await Dir.ListUsersAsync(Ui.BaseDn, subtree: true);
+            userTotal = users.Count;
+            userDisabled = users.Count(u => !u.Enabled);
+            userLocked = users.Count(u => u.LockedOut);
+
+            groupTotal = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).Count;
+            computerTotal = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).Count;
+            ouTotal = (await Dir.ListAllOusAsync(Ui.BaseDn)).Count;
+
+            var expiring = await Expiry.ListExpiringAsync(7);
+            expiringSoon = expiring.Count;
+            topExpiring = expiring.Take(8).ToList();
+
+            recent = await Audit.QueryAsync(new AuditQuery(Take: 8));
+
+            // PNE — по userAccountControl; отдельным лёгким запросом (не тянем весь набор дважды при большом домене).
+            userPne = await CountPneAsync(users);
+        }
+        catch (Exception ex) { banner = "Error loading dashboard: " + ex.Message; }
+        finally { loading = false; }
+    }
+
+    // PNE считаем по факту флага UAC. Для скорости на больших доменах можно заменить на серверный count (TODO R6).
+    private async Task<int> CountPneAsync(IReadOnlyList<AdUserSummary> users)
+    {
+        var n = 0;
+        foreach (var u in users)
+        {
+            var det = await Dir.GetObjectAsync(u.Dn, new[] { "userAccountControl" });
+            var uac = int.TryParse(det?.Attributes.GetValueOrDefault("userAccountControl"), out var v) ? v : 0;
+            if ((uac & UF_PASSWORD_NEVER_EXPIRES) != 0) n++;
+        }
+        return n;
+    }
+}
