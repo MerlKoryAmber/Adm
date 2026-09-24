@@ -28,13 +28,21 @@
         </div>
         <div>
             <label>Layout template</label>
-            <select @bind="templateSel" @bind:after="OnTemplateChange">
-                <option value="">(default)</option>
-                @foreach (var t in templates)
-                {
-                    <option value="@t.Id">@t.Name</option>
-                }
-            </select>
+            @if (templateLocked)
+            {
+                <input type="text" value="@(selectedTemplate?.Name ?? "(default)")" disabled />
+                <div class="hint">Enforced by your delegation for this OU.</div>
+            }
+            else
+            {
+                <select @bind="templateSel" @bind:after="OnTemplateChange">
+                    <option value="">(default)</option>
+                    @foreach (var t in templates)
+                    {
+                        <option value="@t.Id">@t.Name</option>
+                    }
+                </select>
+            }
         </div>
     </div>
 </div>
@@ -127,6 +135,7 @@
     private string createHomeDir = "", createHomeDrive = "";
     private string? banner; private bool ok;
     private FieldPermission allowedFields = FieldPermission.All;
+    private bool templateLocked;
 
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
@@ -145,6 +154,21 @@
     {
         var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
         allowedFields = await Rbac.AllowedFieldsAsync(actor, Permission.CreateUser, ouDn);
+
+        // Принудительный шаблон из делегирования для этого OU (если задан).
+        var enforced = await Rbac.EnforcedTemplateAsync(actor, "Create", ouDn);
+        var tpl = enforced is { } id ? templates.FirstOrDefault(t => t.Id == id) : null;
+        if (tpl is not null)
+        {
+            templateLocked = true;
+            if (selectedTemplate?.Id != tpl.Id)
+            {
+                selectedTemplate = tpl; templateSel = tpl.Id.ToString(); sel = 0;
+                model.Clear(); sam = ""; password = ""; enabled = true; mustChange = false; pwdNeverExpires = false;
+                ApplyTemplateDefaults();
+            }
+        }
+        else { templateLocked = false; }
     }
 
     private void OnTemplateChange()

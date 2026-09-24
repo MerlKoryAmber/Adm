@@ -48,6 +48,11 @@ public sealed class RoleAssignment
     public string? SubjectName { get; init; }
     public required Guid RoleId { get; init; }
     public required Guid ScopeId { get; init; }
+
+    /// <summary>Принудительный шаблон формы создания пользователя для этого назначения (null = без принуждения).</summary>
+    public Guid? CreateTemplateId { get; init; }
+    /// <summary>Принудительный шаблон формы модификации пользователя (null = без принуждения).</summary>
+    public Guid? ModifyTemplateId { get; init; }
 }
 
 /// <summary>Фаза записи аудита: намерение (до операции) и результат (после).</summary>

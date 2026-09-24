@@ -1,6 +1,7 @@
 @page "/delegation"
 @inject IRbacStore Store
 @inject IAdDirectory Dir
+@inject IUserTemplateStore Templates
 @inject UiOptions Ui
 
 <PageTitle>Delegation — admanager</PageTitle>
@@ -109,7 +110,7 @@ else
         else
         {
             <table>
-                <thead><tr><th>Subject</th><th>Type</th><th>Role</th><th>Scope</th><th></th></tr></thead>
+                <thead><tr><th>Subject</th><th>Type</th><th>Role</th><th>Scope</th><th>Templates</th><th></th></tr></thead>
                 <tbody>
                     @foreach (var a in cfg.Assignments)
                     {
@@ -118,6 +119,11 @@ else
                             <td>@a.SubjectType</td>
                             <td>@RoleName(a.RoleId)</td>
                             <td>@ScopeName(a.ScopeId)</td>
+                            <td>
+                                @if (a.CreateTemplateId is { } ct) { <div class="hint">Create: @TemplateName(ct)</div> }
+                                @if (a.ModifyTemplateId is { } mt) { <div class="hint">Modify: @TemplateName(mt)</div> }
+                                @if (a.CreateTemplateId is null && a.ModifyTemplateId is null) { <span class="muted">—</span> }
+                            </td>
                             <td><button class="danger" @onclick="() => DeleteAssignment(a.Id)">Delete</button></td>
                         </tr>
                     }
@@ -168,8 +174,22 @@ else
                     @foreach (var s in cfg.Scopes) { <option value="@s.Id">@s.Name</option> }
                 </select>
             </div>
+            <div>
+                <label>Create-user template</label>
+                <select @bind="asgCreateTpl">
+                    <option value="">— none (technician chooses) —</option>
+                    @foreach (var t in createTemplates) { <option value="@t.Id">@t.Name</option> }
+                </select>
+            </div>
+            <div>
+                <label>Modify-user template</label>
+                <select @bind="asgModifyTpl">
+                    <option value="">— none (technician chooses) —</option>
+                    @foreach (var t in modifyTemplates) { <option value="@t.Id">@t.Name</option> }
+                </select>
+            </div>
         </div>
-        <div class="hint" style="margin-top:6px">SID — из claims техника/группы. Домен-админы и супер-админы (@string.Join(", ", SuperNames)) имеют полный доступ без назначений.</div>
+        <div class="hint" style="margin-top:6px">A selected template is enforced: the technician sees only that layout on Create/Modify (no template switcher). SID — из claims техника/группы. Домен-админы и супер-админы (@string.Join(", ", SuperNames)) имеют полный доступ без назначений.</div>
         <div class="btnrow"><button class="primary" @onclick="CreateAssignment" disabled="@(string.IsNullOrWhiteSpace(asgSid) || string.IsNullOrEmpty(asgRole) || string.IsNullOrEmpty(asgScope))">Create assignment</button></div>
     </div>
     }
@@ -247,8 +267,12 @@ else
     private bool scopeSubtree = true;
 
     private string asgType = "Technician", asgSid = "", asgRole = "", asgScope = "";
+    private string asgCreateTpl = "", asgModifyTpl = "";
     private string subjSearch = "", asgName = "";
     private List<AdSearchResult>? subjResults;
+
+    private List<UserTemplate> createTemplates = new();
+    private List<UserTemplate> modifyTemplates = new();
 
     [SupplyParameterFromQuery(Name = "s")] private string? S { get; set; }
     private string section = "roles";
@@ -257,6 +281,9 @@ else
     {
         cfg = await Store.LoadAsync();
         try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
+        var tpls = await Templates.ListAsync();
+        createTemplates = tpls.Where(t => t.Kind == "Create").ToList();
+        modifyTemplates = tpls.Where(t => t.Kind == "Modify").ToList();
     }
 
     protected override void OnParametersSet()
@@ -264,6 +291,11 @@ else
 
     private string RoleName(Guid id) => cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? "?";
     private string ScopeName(Guid id) => cfg!.Scopes.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
+    private string TemplateName(Guid id)
+    {
+        var all = createTemplates.Concat(modifyTemplates);
+        return all.FirstOrDefault(t => t.Id == id)?.Name ?? "?";
+    }
 
     private void TogglePerm(Permission p, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) rolePerms.Add(p); else rolePerms.Remove(p); }
     private void ToggleOu(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) scopeOus.Add(dn); else scopeOus.Remove(dn); }
@@ -319,8 +351,11 @@ else
             SubjectName = string.IsNullOrWhiteSpace(asgName) ? null : asgName,
             RoleId = Guid.Parse(asgRole),
             ScopeId = Guid.Parse(asgScope),
+            CreateTemplateId = Guid.TryParse(asgCreateTpl, out var ctId) ? ctId : null,
+            ModifyTemplateId = Guid.TryParse(asgModifyTpl, out var mtId) ? mtId : null,
         });
-        await Save("Assignment created."); asgSid = ""; asgName = ""; asgRole = ""; asgScope = "";
+        await Save("Assignment created.");
+        asgSid = ""; asgName = ""; asgRole = ""; asgScope = ""; asgCreateTpl = ""; asgModifyTpl = "";
     }
     private async Task DeleteAssignment(Guid id) { cfg!.Assignments.RemoveAll(a => a.Id == id); await Save("Assignment deleted."); }
 

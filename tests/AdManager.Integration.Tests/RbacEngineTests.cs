@@ -126,6 +126,31 @@ public class RbacEngineTests
     }
 
     [Fact]
+    public async Task Enforced_template_returned_in_scope_null_outside()
+    {
+        var tplId = Guid.NewGuid();
+        var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");
+        var store = new FileRbacStore(path);
+        var role = new HelpDeskRole { Name = "L1", Permissions = { Permission.ModifyAttributes } };
+        var scope = new DelegationScope { Name = "Sales", OuDns = { SalesOu }, IncludeSubtree = true };
+        var cfg = new RbacConfig { Roles = { role }, Scopes = { scope } };
+        cfg.Assignments.Add(new RoleAssignment
+        {
+            SubjectType = SubjectType.Technician, SubjectSid = "S-1-tech",
+            RoleId = role.Id, ScopeId = scope.Id, ModifyTemplateId = tplId,
+        });
+        store.SaveAsync(cfg).GetAwaiter().GetResult();
+        var engine = new RbacEngine(store, new RbacOptions { SuperAdmins = { "admin" } });
+
+        Assert.Equal(tplId, await engine.EnforcedTemplateAsync(Tech, "Modify", TargetInSales));
+        Assert.Null(await engine.EnforcedTemplateAsync(Tech, "Create", TargetInSales)); // Create-шаблон не задан
+        Assert.Null(await engine.EnforcedTemplateAsync(Tech, "Modify", TargetOutside)); // вне scope
+        // Супер-админ не ограничивается назначениями.
+        var admin = new TechnicianContext("S-1-a", "MERL\\admin", "MERL\\admin");
+        Assert.Null(await engine.EnforcedTemplateAsync(admin, "Modify", TargetInSales));
+    }
+
+    [Fact]
     public void Field_sets_round_trip_through_store()
     {
         var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");

@@ -23,13 +23,21 @@ else
 {
     <div class="panel" style="max-width:420px">
         <label>Layout template</label>
-        <select @bind="templateSel" @bind:after="OnTemplateChange">
-            <option value="">(default)</option>
-            @foreach (var t in templates)
-            {
-                <option value="@t.Id">@t.Name</option>
-            }
-        </select>
+        @if (templateLocked)
+        {
+            <input type="text" value="@(selectedTemplate?.Name ?? "(default)")" disabled />
+            <div class="hint">Enforced by your delegation for this object.</div>
+        }
+        else
+        {
+            <select @bind="templateSel" @bind:after="OnTemplateChange">
+                <option value="">(default)</option>
+                @foreach (var t in templates)
+                {
+                    <option value="@t.Id">@t.Name</option>
+                }
+            </select>
+        }
     </div>
 
     <div class="tabbar">
@@ -253,6 +261,7 @@ else
     private List<UserTemplate> templates = new();
     private UserTemplate? selectedTemplate;
     private string templateSel = "";
+    private bool templateLocked;
     private readonly List<TemplateTab> defaultLayout = TemplateDefaults.Modify();
 
     private Dictionary<string, string?>? model;
@@ -311,6 +320,11 @@ else
             uacFlags["__desOnly"] = (uac & 0x200000) != 0;
             uacFlags["__noPreauth"] = (uac & 0x400000) != 0;
             templates = (await Templates.ListAsync()).Where(t => t.Kind == "Modify").ToList();
+            var enforced = await Rbac.EnforcedTemplateAsync(await Actor(), "Modify", Dn);
+            if (enforced is { } tid && templates.FirstOrDefault(t => t.Id == tid) is { } etpl)
+            {
+                templateLocked = true; selectedTemplate = etpl; templateSel = etpl.Id.ToString();
+            }
             userGroups = (await Dir.ListUserGroupsAsync(Dn)).ToList();
             allGroups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList();
             managerDisplay = Rdn(model.GetValueOrDefault("manager"));

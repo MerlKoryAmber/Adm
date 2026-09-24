@@ -140,6 +140,10 @@ public interface IRbacEngine
     /// <summary>Разрешённые поля для CreateUser/ModifyAttributes над targetDn (объединение по совпавшим ролям;
     /// роль без списка = без ограничений). Только для этих двух операций; для прочих — <see cref="FieldPermission.All"/>.</summary>
     Task<FieldPermission> AllowedFieldsAsync(TechnicianContext actor, Permission operation, string targetDn, CancellationToken ct = default);
+
+    /// <summary>Принудительный шаблон формы (Create|Modify) для актора над targetDn: Id первого назначения
+    /// в scope, где шаблон задан. null — принуждения нет (техник выбирает сам, или супер-админ). </summary>
+    Task<Guid?> EnforcedTemplateAsync(TechnicianContext actor, string kind, string targetDn, CancellationToken ct = default);
 }
 
 /// <summary>Неизменяемый аудит (§аудит).</summary>

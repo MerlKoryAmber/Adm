@@ -108,6 +108,25 @@ public sealed class RbacEngine : IRbacEngine
         return matchedAny ? new FieldPermission(false, fields) : FieldPermission.None;
     }
 
+    public async Task<Guid?> EnforcedTemplateAsync(TechnicianContext actor, string kind, string targetDn, CancellationToken ct = default)
+    {
+        if (IsSuperAdmin(actor)) return null; // супер-админ не ограничивается назначениями
+
+        var cfg = await _store.LoadAsync(ct);
+        var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
+        if (actor.GroupSids is not null)
+            foreach (var g in actor.GroupSids) subjects.Add(g);
+
+        foreach (var a in cfg.Assignments.Where(a => subjects.Contains(a.SubjectSid)))
+        {
+            var tpl = kind == "Create" ? a.CreateTemplateId : a.ModifyTemplateId;
+            if (tpl is null) continue;
+            var scope = cfg.Scopes.FirstOrDefault(s => s.Id == a.ScopeId);
+            if (scope is not null && ScopeMatches(scope, targetDn)) return tpl;
+        }
+        return null;
+    }
+
     private bool IsSuperAdmin(TechnicianContext actor)
     {
         if (string.Equals(actor.Sid, _options.AutomationSid, StringComparison.Ordinal)) return true;
