@@ -140,6 +140,21 @@ if (useEfAudit)
     }
 }
 
+// Полное отключение браузерного кеша для всех ответов (статика + страницы).
+// Ставится первым, чтобы заголовки попали и на статику, и на Blazor-ответы.
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.OnStarting(() =>
+    {
+        var h = ctx.Response.Headers;
+        h["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+        h["Pragma"] = "no-cache";
+        h["Expires"] = "0";
+        return Task.CompletedTask;
+    });
+    await next();
+});
+
 app.UseStaticFiles();
 if (requireAuth)
 {
