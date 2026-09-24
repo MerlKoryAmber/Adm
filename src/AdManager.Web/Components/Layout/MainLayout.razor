@@ -25,6 +25,8 @@
     </header>
 
     <div class="body">
+        @if (Section != "Dashboard")
+        {
         <aside class="tree">
             @if (Section == "Management")
             {
@@ -86,6 +88,7 @@
                 <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">Email &amp; HTTPS</NavLink>
             }
         </aside>
+        }
 
         <main class="content">
             @Body
