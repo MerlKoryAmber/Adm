@@ -25,6 +25,8 @@
 - **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
 ## Сделано в сессии 2026-09-24
+- **RBAC-фильтрация UI по правам**: техник видит только делегированные разделы. `RbacEngine.EffectiveAccessAsync` → `EffectiveAccess`; меню (`MainLayout`, грузится в OnAfterRender — AuthState на пререндере пуст) и все чувствительные страницы (`RequireAccess`-гард, 25 страниц) фильтруются. Новые Permission на разделы (ViewReports/ManageDelegation/ManageAutomation/ManageSettings/ManagePasswordExpiry, группа Administration). Админ-разделы теперь делегируются ролью, не хардкодом. Bootstrap-супер-админы: merl + **MerlKory** (локальный админ стенда). Тесты RbacEngine 12/12.
+- **Отключено браузерное кеширование** (middleware no-cache на все ответы).
 - **Delegation: убрано пустое боковое меню на Dashboard.**
 - **Пополевой темплейт в assignment**: `RoleAssignment.CreateTemplateId`/`ModifyTemplateId` — принудительный Form-template (Create/Modify) из наших шаблонов. UI: два селектора в New assignment + колонка Templates в таблице. Enforcement: `RbacEngine.EnforcedTemplateAsync`; формы Create/Modify лочат селектор шаблона на заданный (техник не переключает). Тесты RbacEngine 11/11. Дашборд без бокового меню.
 

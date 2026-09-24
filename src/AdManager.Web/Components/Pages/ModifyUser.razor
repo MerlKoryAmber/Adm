@@ -9,6 +9,7 @@
 <PageTitle>Modify user — admanager</PageTitle>
 <h1>Modify user</h1>
 <p class="subtitle">@(model is null ? "" : $"{model.GetValueOrDefault("displayName")} ({sam}) — {Rdn(ParentOf(Dn))}")</p>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 
 @if (banner is not null)
 {
@@ -250,6 +251,7 @@ else
         </div>
     </div>
 }
+</RequireAccess>
 
 @code {
     [SupplyParameterFromQuery] private string? Dn { get; set; }

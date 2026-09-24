@@ -6,6 +6,7 @@
 
 <PageTitle>Computer Management — admanager</PageTitle>
 <h1>Modify computers</h1>
+<RequireAccess Permissions="new[] { Permission.CreateComputer, Permission.ManageComputer }">
 
 @if (banner is not null)
 {
@@ -93,6 +94,7 @@ else
         <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

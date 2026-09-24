@@ -5,6 +5,7 @@
 
 <PageTitle>Bulk create users — admanager</PageTitle>
 <h1>Bulk create users</h1>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 <p class="subtitle">Paste CSV. Columns: <code>sam,displayName,upn,password,ou,enabled,department,title</code>. Header row optional. Empty OU → default.</p>
 
 <div class="panel" style="max-width:760px">
@@ -41,6 +42,7 @@
         </table>
     </div>
 }
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

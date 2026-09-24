@@ -6,6 +6,7 @@
 
 <PageTitle>Modify OUs — admanager</PageTitle>
 <h1>Modify OUs</h1>
+<RequireAccess Permissions="new[] { Permission.CreateOu, Permission.ManageOu }">
 <p class="subtitle">Organizational units under the managed domain.</p>
 
 @if (banner is not null)
@@ -64,6 +65,7 @@
         }
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

@@ -7,6 +7,7 @@
 <PageTitle>Modify group — admanager</PageTitle>
 <h1>Modify group</h1>
 <p class="subtitle">@(loaded ? $"{gName} ({gSam}) — {Rdn(ParentOf(Dn))}" : "")</p>
+<RequireAccess Permissions="new[] { Permission.CreateGroup, Permission.ManageGroupMembership }">
 
 @if (banner is not null)
 {
@@ -94,6 +95,7 @@ else
         <div class="btnrow" style="margin-top:16px"><button @onclick='() => Nav.NavigateTo("groups")'>Back to groups</button></div>
     </div>
 }
+</RequireAccess>
 
 @code {
     [SupplyParameterFromQuery] private string? Dn { get; set; }

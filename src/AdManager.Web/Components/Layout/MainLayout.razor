@@ -1,19 +1,21 @@
 @inherits LayoutComponentBase
 @inject UiOptions Ui
 @inject NavigationManager Nav
+@inject IRbacEngine Rbac
 @implements IDisposable
+@using AdManager.Domain.Enums
 
 <div class="shell">
     <header class="topbar">
         <div class="logo">ADManager<span>·lab</span></div>
         <nav class="tabs">
             <a class="tab @(Section == "Dashboard" ? "active" : null)" href="dashboard">Dashboard</a>
-            <a class="tab @(Section == "Management" ? "active" : null)" href="users">Management</a>
-            <a class="tab @(Section == "Reports" ? "active" : null)" href="reports">Reports</a>
-            <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a>
-            <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a>
-            <a class="tab @(Section == "PasswordExpiry" ? "active" : null)" href="password-expiry">Password Expiry</a>
-            <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a>
+            @if (CanManagement) { <a class="tab @(Section == "Management" ? "active" : null)" href="@ManagementHome">Management</a> }
+            @if (access.Can(Permission.ViewReports)) { <a class="tab @(Section == "Reports" ? "active" : null)" href="reports">Reports</a> }
+            @if (access.Can(Permission.ManageDelegation)) { <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a> }
+            @if (access.Can(Permission.ManageAutomation)) { <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a> }
+            @if (access.Can(Permission.ManagePasswordExpiry)) { <a class="tab @(Section == "PasswordExpiry" ? "active" : null)" href="password-expiry">Password Expiry</a> }
+            @if (access.Can(Permission.ManageSettings)) { <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a> }
         </nav>
         <div class="topright">
             <span class="domainchip">Domain: @Ui.Domain</span>
@@ -30,28 +32,49 @@
         <aside class="tree">
             @if (Section == "Management")
             {
-                <NavLink class="treeitem" href="search">🔍 Advanced search</NavLink>
-                <div class="treegroup">User Management</div>
-                <NavLink class="treeitem" href="users" Match="NavLinkMatch.All">Modify users</NavLink>
-                <NavLink class="treeitem" href="users/create">Create user</NavLink>
-                <NavLink class="treeitem" href="users/bulk">Bulk create (CSV)</NavLink>
-                <NavLink class="treeitem" href="templates">Form templates</NavLink>
-                <div class="treegroup">Group Management</div>
-                <NavLink class="treeitem" href="groups" Match="NavLinkMatch.All">Modify groups</NavLink>
-                <NavLink class="treeitem" href="groups/create">Create group</NavLink>
-                <div class="treegroup">Computer Management</div>
-                <NavLink class="treeitem" href="computers" Match="NavLinkMatch.All">Modify computers</NavLink>
-                <NavLink class="treeitem" href="computers/create">Create computer</NavLink>
-                <div class="treegroup">OU Management</div>
-                <NavLink class="treeitem" href="ous" Match="NavLinkMatch.All">Modify OUs</NavLink>
-                <NavLink class="treeitem" href="ous/create">Create OU</NavLink>
-                <div class="treegroup">Group Policy</div>
-                <NavLink class="treeitem" href="gpo">Group Policy Objects</NavLink>
-                <div class="treegroup">Contact Management</div>
-                <NavLink class="treeitem" href="contacts" Match="NavLinkMatch.All">Modify contacts</NavLink>
-                <NavLink class="treeitem" href="contacts/create">Create contact</NavLink>
-                <div class="treegroup">Exchange</div>
-                <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
+                @if (CanUsers)
+                {
+                    <NavLink class="treeitem" href="search">🔍 Advanced search</NavLink>
+                    <div class="treegroup">User Management</div>
+                    <NavLink class="treeitem" href="users" Match="NavLinkMatch.All">Modify users</NavLink>
+                    @if (access.Can(Permission.CreateUser)) { <NavLink class="treeitem" href="users/create">Create user</NavLink> }
+                    @if (access.Can(Permission.CreateUser)) { <NavLink class="treeitem" href="users/bulk">Bulk create (CSV)</NavLink> }
+                    <NavLink class="treeitem" href="templates">Form templates</NavLink>
+                }
+                @if (CanGroups)
+                {
+                    <div class="treegroup">Group Management</div>
+                    <NavLink class="treeitem" href="groups" Match="NavLinkMatch.All">Modify groups</NavLink>
+                    @if (access.Can(Permission.CreateGroup)) { <NavLink class="treeitem" href="groups/create">Create group</NavLink> }
+                }
+                @if (CanComputers)
+                {
+                    <div class="treegroup">Computer Management</div>
+                    <NavLink class="treeitem" href="computers" Match="NavLinkMatch.All">Modify computers</NavLink>
+                    @if (access.Can(Permission.CreateComputer)) { <NavLink class="treeitem" href="computers/create">Create computer</NavLink> }
+                }
+                @if (CanOus)
+                {
+                    <div class="treegroup">OU Management</div>
+                    <NavLink class="treeitem" href="ous" Match="NavLinkMatch.All">Modify OUs</NavLink>
+                    @if (access.Can(Permission.CreateOu)) { <NavLink class="treeitem" href="ous/create">Create OU</NavLink> }
+                }
+                @if (access.Can(Permission.ManageGpoLinks))
+                {
+                    <div class="treegroup">Group Policy</div>
+                    <NavLink class="treeitem" href="gpo">Group Policy Objects</NavLink>
+                }
+                @if (CanContacts)
+                {
+                    <div class="treegroup">Contact Management</div>
+                    <NavLink class="treeitem" href="contacts" Match="NavLinkMatch.All">Modify contacts</NavLink>
+                    @if (access.Can(Permission.CreateContact)) { <NavLink class="treeitem" href="contacts/create">Create contact</NavLink> }
+                }
+                @if (CanExchange)
+                {
+                    <div class="treegroup">Exchange</div>
+                    <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
+                }
             }
             else if (Section == "Reports")
             {
@@ -112,7 +135,45 @@
         }
     }
 
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private EffectiveAccess access = new(false, new HashSet<Permission>());
+
+    // Групповые предикаты доступа к разделам Management.
+    private bool CanUsers => access.CanAny(Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser,
+        Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject,
+        Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions);
+    private bool CanGroups => access.Can(Permission.CreateGroup);
+    private bool CanComputers => access.CanAny(Permission.CreateComputer, Permission.ManageComputer);
+    private bool CanOus => access.CanAny(Permission.CreateOu, Permission.ManageOu);
+    private bool CanContacts => access.CanAny(Permission.CreateContact, Permission.ManageContact);
+    private bool CanExchange => access.CanAny(Permission.EnableMailbox, Permission.DisableMailbox,
+        Permission.SetMailboxProperties, Permission.ManageDistribution, Permission.ManageMailboxPermissions);
+    private bool CanManagement => CanUsers || CanGroups || CanComputers || CanOus || CanContacts || CanExchange
+        || access.Can(Permission.ManageGpoLinks);
+
+    // Куда ведёт вкладка Management — первая доступная страница.
+    private string ManagementHome =>
+        CanUsers ? "users" : CanGroups ? "groups" : CanComputers ? "computers" :
+        CanOus ? "ous" : CanContacts ? "contacts" : access.Can(Permission.ManageGpoLinks) ? "gpo" :
+        CanExchange ? "exchange" : "users";
+
+    private string? accessLoadedFor;
+
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    // Грузим доступ после первого интерактивного рендера: при InteractiveServer AuthState
+    // на пререндере ещё не аутентифицирован. Guard по имени — от повторной загрузки.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var user = AuthState is null ? null : (await AuthState).User;
+        var name = user?.Identity?.Name ?? "";
+        if (name == accessLoadedFor) return;
+        accessLoadedFor = name;
+        access = await Rbac.EffectiveAccessAsync(CurrentUser.From(user));
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 }

@@ -4,6 +4,7 @@
 
 <PageTitle>Templates — admanager</PageTitle>
 <h1>User form templates</h1>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 <p class="subtitle">Layouts for the create/modify user forms: which fields sit on which tab, and the tab names.</p>
 
 @if (banner is not null)
@@ -61,6 +62,7 @@ else
         </div>
     </div>
 }
+</RequireAccess>
 
 @code {
     private List<UserTemplate>? items;

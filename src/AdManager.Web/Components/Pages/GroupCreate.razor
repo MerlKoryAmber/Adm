@@ -6,6 +6,7 @@
 
 <PageTitle>Create group — admanager</PageTitle>
 <h1>Create group</h1>
+<RequireAccess Permissions="new[] { Permission.CreateGroup, Permission.ManageGroupMembership }">
 
 @if (banner is not null)
 {
@@ -51,6 +52,7 @@
         <button @onclick='() => Nav.NavigateTo("groups")'>Back to groups</button>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

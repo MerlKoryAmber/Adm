@@ -42,4 +42,11 @@ public enum Permission
 
     // Group Policy
     ManageGpoLinks,
+
+    // Administration / порталы (доступ к верхним разделам)
+    ViewReports,
+    ManageDelegation,
+    ManageAutomation,
+    ManageSettings,
+    ManagePasswordExpiry,
 }

@@ -6,6 +6,7 @@
 
 <PageTitle>Users — admanager</PageTitle>
 <h1>Modify users</h1>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 
 @if (banner is not null)
 {
@@ -100,6 +101,7 @@ else
         <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

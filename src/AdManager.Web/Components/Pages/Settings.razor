@@ -3,6 +3,7 @@
 
 <PageTitle>Settings — admanager</PageTitle>
 <h1>Settings</h1>
+<RequireAccess Permissions="new[] { Permission.ManageSettings }">
 <p class="subtitle">Runtime settings for outgoing email (SMTP) and HTTPS/certificates. Stored in App_Data (lab).</p>
 
 @if (banner is not null)
@@ -91,6 +92,7 @@ else
         <button class="primary" @onclick="Save">Save settings</button>
     </div>
 }
+</RequireAccess>
 
 @code {
     private AppSettings? model;

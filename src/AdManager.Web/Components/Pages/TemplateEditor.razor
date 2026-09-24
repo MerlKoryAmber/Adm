@@ -4,6 +4,7 @@
 
 <PageTitle>Template editor — admanager</PageTitle>
 <h1>@(isNew ? "New template" : "Edit template")</h1>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 
 @if (banner is not null)
 {
@@ -126,6 +127,7 @@
     <button class="primary" @onclick="Save" disabled="@string.IsNullOrWhiteSpace(tpl.Name)">Save template</button>
     <button @onclick='() => Nav.NavigateTo("templates")'>Back to templates</button>
 </div>
+</RequireAccess>
 
 @code {
     [SupplyParameterFromQuery] private Guid? Id { get; set; }

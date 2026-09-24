@@ -8,6 +8,7 @@
 
 <PageTitle>Create user — admanager</PageTitle>
 <h1>Create user</h1>
+<RequireAccess Permissions="new[] { Permission.ResetPassword, Permission.UnlockAccount, Permission.EnableDisableUser, Permission.CreateUser, Permission.DeleteUser, Permission.ModifyAttributes, Permission.MoveObject, Permission.ManageGroupMembership, Permission.Rename, Permission.SetAccountOptions }">
 
 @if (banner is not null)
 {
@@ -118,6 +119,7 @@
         <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

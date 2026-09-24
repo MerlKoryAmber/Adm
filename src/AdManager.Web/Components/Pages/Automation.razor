@@ -6,6 +6,7 @@
 
 <PageTitle>Automation — admanager</PageTitle>
 <h1>Automation</h1>
+<RequireAccess Permissions="new[] { Permission.ManageAutomation }">
 <p class="subtitle">Scheduled & rule-based tasks (cron in MSK). No approval workflow — each run goes through RBAC + audit.</p>
 
 @if (banner is not null)
@@ -70,6 +71,7 @@
     <div class="checkbox"><input type="checkbox" id="en" @bind="enabled" /><label for="en">Enabled</label></div>
     <div class="btnrow"><button class="primary" @onclick="Create" disabled="@(string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(cron))">Create automation</button></div>
 </div>
+</RequireAccess>
 
 @code {
     private AutomationData? data;

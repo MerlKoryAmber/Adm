@@ -6,6 +6,7 @@
 
 <PageTitle>Group Management — admanager</PageTitle>
 <h1>Modify groups</h1>
+<RequireAccess Permissions="new[] { Permission.CreateGroup, Permission.ManageGroupMembership }">
 
 @if (banner is not null)
 {
@@ -88,6 +89,7 @@ else
         <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

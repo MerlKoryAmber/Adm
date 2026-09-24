@@ -5,6 +5,7 @@
 
 <PageTitle>Exchange — admanager</PageTitle>
 <h1>Exchange</h1>
+<RequireAccess Permissions="new[] { Permission.EnableMailbox, Permission.DisableMailbox, Permission.SetMailboxProperties, Permission.ManageDistribution, Permission.ManageMailboxPermissions }">
 <p class="subtitle">On-prem Exchange 2019 via remote PowerShell. Requires a configured Exchange server (Exchange:ConnectionUri).</p>
 
 @if (banner is not null)
@@ -151,6 +152,7 @@ else
         </div>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

@@ -1,0 +1,39 @@
+@namespace AdManager.Web.Components.Shared
+@inject IRbacEngine Rbac
+@using AdManager.Domain.Enums
+
+@* Гард страницы: показывает контент только если у актора есть хотя бы одно из Permissions.
+   Иначе — заглушка Access denied. Серверный RBAC на операциях остаётся второй линией. *@
+
+@if (!loaded)
+{
+    <p>Checking access…</p>
+}
+else if (allowed)
+{
+    @ChildContent
+}
+else
+{
+    <div class="panel" style="max-width:520px">
+        <h3>Access denied</h3>
+        <p class="hint">You don't have a delegated role that grants access to this section. Contact an administrator.</p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Permission[] Permissions { get; set; } = Array.Empty<Permission>();
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool loaded;
+    private bool allowed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = AuthState is null ? null : (await AuthState).User;
+        var access = await Rbac.EffectiveAccessAsync(CurrentUser.From(user));
+        allowed = access.IsSuperAdmin || Permissions.Any(access.Can);
+        loaded = true;
+    }
+}

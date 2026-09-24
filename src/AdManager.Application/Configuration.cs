@@ -61,6 +61,9 @@ public sealed class AllowAllRbacEngine : IRbacEngine
 
     public Task<Guid?> EnforcedTemplateAsync(TechnicianContext actor, string kind, string targetDn, CancellationToken ct = default)
         => Task.FromResult<Guid?>(null);
+
+    public Task<EffectiveAccess> EffectiveAccessAsync(TechnicianContext actor, CancellationToken ct = default)
+        => Task.FromResult(new EffectiveAccess(true, new HashSet<Permission>()));
 }
 
 /// <summary>Время МСК (§20).</summary>

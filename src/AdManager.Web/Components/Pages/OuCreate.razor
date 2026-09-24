@@ -6,6 +6,7 @@
 
 <PageTitle>Create OU — admanager</PageTitle>
 <h1>Create OU</h1>
+<RequireAccess Permissions="new[] { Permission.CreateOu, Permission.ManageOu }">
 
 @if (banner is not null)
 {
@@ -32,6 +33,7 @@
         <button @onclick='() => Nav.NavigateTo("ous")'>Back to OUs</button>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

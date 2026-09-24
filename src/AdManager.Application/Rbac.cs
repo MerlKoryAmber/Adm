@@ -7,8 +7,9 @@ namespace AdManager.Application;
 /// <summary>Настройки RBAC-движка.</summary>
 public sealed class RbacOptions
 {
-    /// <summary>sAMAccountName супер-админов (полный доступ, минуя назначения).</summary>
-    public List<string> SuperAdmins { get; set; } = new() { "merl" };
+    /// <summary>sAMAccountName супер-админов (полный доступ, минуя назначения) — bootstrap.
+    /// Доменный merl + локальный админ стенда MerlKory. Прочих админов заводят ролью через Delegation.</summary>
+    public List<string> SuperAdmins { get; set; } = new() { "merl", "MerlKory" };
 
     /// <summary>Считать членов Domain Admins (RID 512) супер-админами.</summary>
     public bool DomainAdminsAreSuper { get; set; } = true;
@@ -106,6 +107,26 @@ public sealed class RbacEngine : IRbacEngine
 
         // Нет ни одной подходящей роли — операция всё равно не пройдёт в AuthorizeAsync; поля пусты.
         return matchedAny ? new FieldPermission(false, fields) : FieldPermission.None;
+    }
+
+    public async Task<EffectiveAccess> EffectiveAccessAsync(TechnicianContext actor, CancellationToken ct = default)
+    {
+        if (IsSuperAdmin(actor))
+            return new EffectiveAccess(true, new HashSet<Permission>());
+
+        var cfg = await _store.LoadAsync(ct);
+        var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
+        if (actor.GroupSids is not null)
+            foreach (var g in actor.GroupSids) subjects.Add(g);
+
+        var perms = new HashSet<Permission>();
+        foreach (var a in cfg.Assignments.Where(a => subjects.Contains(a.SubjectSid)))
+        {
+            var role = cfg.Roles.FirstOrDefault(r => r.Id == a.RoleId);
+            if (role is null) continue;
+            foreach (var p in role.Permissions) perms.Add(p);
+        }
+        return new EffectiveAccess(false, perms);
     }
 
     public async Task<Guid?> EnforcedTemplateAsync(TechnicianContext actor, string kind, string targetDn, CancellationToken ct = default)

@@ -6,6 +6,7 @@
 
 <PageTitle>Delegation — admanager</PageTitle>
 <h1>Delegation</h1>
+<RequireAccess Permissions="new[] { Permission.ManageDelegation }">
 <p class="subtitle">Help-desk roles (task sets) → scopes (OUs) → assignments (technician SID / AD group SID). Super-admins bypass.</p>
 
 @if (banner is not null)
@@ -194,6 +195,7 @@ else
     </div>
     }
 }
+</RequireAccess>
 
 @code {
     private RbacConfig? cfg;
@@ -229,6 +231,11 @@ else
         [Permission.ManageDistribution] = "Manage distribution groups",
         [Permission.ManageMailboxPermissions] = "Manage mailbox permissions",
         [Permission.ManageGpoLinks] = "Manage GPO links",
+        [Permission.ViewReports] = "View reports",
+        [Permission.ManageDelegation] = "Manage delegation",
+        [Permission.ManageAutomation] = "Manage automation",
+        [Permission.ManageSettings] = "Manage settings",
+        [Permission.ManagePasswordExpiry] = "Manage password expiry",
     };
 
     private static string PermissionLabel(Permission p) => PermLabels.GetValueOrDefault(p, p.ToString());
@@ -251,6 +258,8 @@ else
             ("Exchange", new[] { Permission.EnableMailbox, Permission.DisableMailbox, Permission.SetMailboxProperties,
                 Permission.ManageDistribution, Permission.ManageMailboxPermissions }),
             ("Group Policy", new[] { Permission.ManageGpoLinks }),
+            ("Administration", new[] { Permission.ViewReports, Permission.ManageDelegation,
+                Permission.ManageAutomation, Permission.ManageSettings, Permission.ManagePasswordExpiry }),
         };
         return groups
             .Select(g => (g.Group, g.Perms.OrderBy(PermissionLabel, StringComparer.OrdinalIgnoreCase).ToArray()))

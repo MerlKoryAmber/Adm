@@ -144,6 +144,17 @@ public interface IRbacEngine
     /// <summary>Принудительный шаблон формы (Create|Modify) для актора над targetDn: Id первого назначения
     /// в scope, где шаблон задан. null — принуждения нет (техник выбирает сам, или супер-админ). </summary>
     Task<Guid?> EnforcedTemplateAsync(TechnicianContext actor, string kind, string targetDn, CancellationToken ct = default);
+
+    /// <summary>Все операции, доступные актору хотя бы в одном scope (для фильтрации меню/навигации).
+    /// Супер-админ — все операции. Не учитывает конкретный target (грубая проверка «есть ли право вообще»).</summary>
+    Task<EffectiveAccess> EffectiveAccessAsync(TechnicianContext actor, CancellationToken ct = default);
+}
+
+/// <summary>Сводный доступ актора (для UI-навигации). SuperAdmin — полный доступ.</summary>
+public sealed record EffectiveAccess(bool IsSuperAdmin, IReadOnlySet<Permission> Permissions)
+{
+    public bool Can(Permission p) => IsSuperAdmin || Permissions.Contains(p);
+    public bool CanAny(params Permission[] ps) => IsSuperAdmin || ps.Any(Permissions.Contains);
 }
 
 /// <summary>Неизменяемый аудит (§аудит).</summary>

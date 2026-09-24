@@ -6,6 +6,7 @@
 
 <PageTitle>Group Policy — admanager</PageTitle>
 <h1>Group Policy</h1>
+<RequireAccess Permissions="new[] { Permission.ManageGpoLinks }">
 <p class="subtitle">Group Policy Objects and their links (create/link/enforce via gPLink over LDAP). Editing GPO settings is out of scope.</p>
 
 @if (banner is not null)
@@ -101,6 +102,7 @@
         </div>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

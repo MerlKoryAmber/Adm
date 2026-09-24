@@ -151,6 +151,31 @@ public class RbacEngineTests
     }
 
     [Fact]
+    public async Task EffectiveAccess_aggregates_role_permissions_super_gets_all()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");
+        var store = new FileRbacStore(path);
+        var role = new HelpDeskRole { Name = "L1", Permissions = { Permission.ResetPassword, Permission.CreateUser } };
+        var scope = new DelegationScope { Name = "Sales", OuDns = { SalesOu } };
+        var cfg = new RbacConfig { Roles = { role }, Scopes = { scope } };
+        cfg.Assignments.Add(new RoleAssignment { SubjectType = SubjectType.Technician, SubjectSid = "S-1-tech", RoleId = role.Id, ScopeId = scope.Id });
+        store.SaveAsync(cfg).GetAwaiter().GetResult();
+        var engine = new RbacEngine(store, new RbacOptions { SuperAdmins = { "admin" } });
+
+        var techAccess = await engine.EffectiveAccessAsync(Tech);
+        Assert.False(techAccess.IsSuperAdmin);
+        Assert.True(techAccess.Can(Permission.ResetPassword));
+        Assert.True(techAccess.Can(Permission.CreateUser));
+        Assert.False(techAccess.Can(Permission.ManageSettings));
+        Assert.True(techAccess.CanAny(Permission.ManageSettings, Permission.CreateUser));
+
+        var admin = new TechnicianContext("S-1-a", "MERL\\admin", "MERL\\admin");
+        var adminAccess = await engine.EffectiveAccessAsync(admin);
+        Assert.True(adminAccess.IsSuperAdmin);
+        Assert.True(adminAccess.Can(Permission.ManageSettings)); // супер-админ — всё
+    }
+
+    [Fact]
     public void Field_sets_round_trip_through_store()
     {
         var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");

@@ -6,6 +6,7 @@
 
 <PageTitle>Create contact — admanager</PageTitle>
 <h1>Create contact</h1>
+<RequireAccess Permissions="new[] { Permission.CreateContact, Permission.ManageContact }">
 
 @if (banner is not null)
 {
@@ -36,6 +37,7 @@
         <button @onclick='() => Nav.NavigateTo("contacts")'>Back to contacts</button>
     </div>
 </div>
+</RequireAccess>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }

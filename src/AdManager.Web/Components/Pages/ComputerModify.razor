@@ -7,6 +7,7 @@
 <PageTitle>Modify computer — admanager</PageTitle>
 <h1>Modify computer</h1>
 <p class="subtitle">@(loaded ? $"{cName} — {Rdn(ParentOf(Dn))}" : "")</p>
+<RequireAccess Permissions="new[] { Permission.CreateComputer, Permission.ManageComputer }">
 
 @if (banner is not null)
 {
@@ -76,6 +77,7 @@ else
         <div class="btnrow" style="margin-top:16px"><button @onclick='() => Nav.NavigateTo("computers")'>Back to computers</button></div>
     </div>
 }
+</RequireAccess>
 
 @code {
     [SupplyParameterFromQuery] private string? Dn { get; set; }
