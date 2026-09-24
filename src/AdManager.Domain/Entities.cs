@@ -17,6 +17,10 @@ public sealed class HelpDeskRole
     public required string Name { get; init; }
     public HashSet<Permission> Permissions { get; init; } = new();
 
+    /// <summary>Роль супер-администратора: полный доступ в обход назначений/scope (как bootstrap-merl,
+    /// но управляется через UI). Носителя такой роли RBAC считает супер-админом.</summary>
+    public bool IsSuperAdmin { get; init; }
+
     /// <summary>Ключи полей (FieldCatalog), которые роль разрешает задавать при создании пользователя.
     /// Пустой набор = ограничений нет (все поля), обратная совместимость. Уточняет <see cref="Permission.CreateUser"/>.</summary>
     public HashSet<string> CreateUserFields { get; init; } = new();

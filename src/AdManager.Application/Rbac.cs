@@ -56,6 +56,8 @@ public sealed class RbacEngine : IRbacEngine
         }
 
         var cfg = await _store.LoadAsync(ct);
+        if (HasSuperAdminRole(cfg, actor)) return new AuthorizationDecision(true, "super-admin (role)");
+
         var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
         if (actor.GroupSids is not null)
         {
@@ -85,6 +87,8 @@ public sealed class RbacEngine : IRbacEngine
         if (IsSuperAdmin(actor)) return FieldPermission.All;
 
         var cfg = await _store.LoadAsync(ct);
+        if (HasSuperAdminRole(cfg, actor)) return FieldPermission.All;
+
         var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
         if (actor.GroupSids is not null)
             foreach (var g in actor.GroupSids) subjects.Add(g);
@@ -115,6 +119,8 @@ public sealed class RbacEngine : IRbacEngine
             return new EffectiveAccess(true, new HashSet<Permission>());
 
         var cfg = await _store.LoadAsync(ct);
+        if (HasSuperAdminRole(cfg, actor)) return new EffectiveAccess(true, new HashSet<Permission>());
+
         var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
         if (actor.GroupSids is not null)
             foreach (var g in actor.GroupSids) subjects.Add(g);
@@ -134,6 +140,8 @@ public sealed class RbacEngine : IRbacEngine
         if (IsSuperAdmin(actor)) return null; // супер-админ не ограничивается назначениями
 
         var cfg = await _store.LoadAsync(ct);
+        if (HasSuperAdminRole(cfg, actor)) return null;
+
         var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
         if (actor.GroupSids is not null)
             foreach (var g in actor.GroupSids) subjects.Add(g);
@@ -146,6 +154,16 @@ public sealed class RbacEngine : IRbacEngine
             if (scope is not null && ScopeMatches(scope, targetDn)) return tpl;
         }
         return null;
+    }
+
+    // Носитель роли с IsSuperAdmin (назначение в любом scope) — супер-админ через UI-делегирование.
+    private static bool HasSuperAdminRole(RbacConfig cfg, TechnicianContext actor)
+    {
+        var subjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { actor.Sid };
+        if (actor.GroupSids is not null)
+            foreach (var g in actor.GroupSids) subjects.Add(g);
+        var superRoleIds = cfg.Roles.Where(r => r.IsSuperAdmin).Select(r => r.Id).ToHashSet();
+        return superRoleIds.Count > 0 && cfg.Assignments.Any(a => subjects.Contains(a.SubjectSid) && superRoleIds.Contains(a.RoleId));
     }
 
     private bool IsSuperAdmin(TechnicianContext actor)

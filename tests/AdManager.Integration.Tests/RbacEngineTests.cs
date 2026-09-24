@@ -176,6 +176,25 @@ public class RbacEngineTests
     }
 
     [Fact]
+    public async Task SuperAdmin_role_grants_full_access()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");
+        var store = new FileRbacStore(path);
+        var superRole = new HelpDeskRole { Name = "Admins", IsSuperAdmin = true }; // без явных permissions
+        var scope = new DelegationScope { Name = "Sales", OuDns = { SalesOu } };
+        var cfg = new RbacConfig { Roles = { superRole }, Scopes = { scope } };
+        cfg.Assignments.Add(new RoleAssignment { SubjectType = SubjectType.Technician, SubjectSid = "S-1-tech", RoleId = superRole.Id, ScopeId = scope.Id });
+        store.SaveAsync(cfg).GetAwaiter().GetResult();
+        var engine = new RbacEngine(store, new RbacOptions()); // merl не в списке — только роль
+
+        // Полный доступ везде, включая вне scope и любые операции.
+        Assert.True((await engine.AuthorizeAsync(Tech, Permission.DeleteUser, TargetOutside)).Allowed);
+        Assert.True((await engine.EffectiveAccessAsync(Tech)).IsSuperAdmin);
+        Assert.True((await engine.AllowedFieldsAsync(Tech, Permission.ModifyAttributes, TargetOutside)).Unrestricted);
+        Assert.Null(await engine.EnforcedTemplateAsync(Tech, "Modify", TargetOutside));
+    }
+
+    [Fact]
     public void Field_sets_round_trip_through_store()
     {
         var path = Path.Combine(Path.GetTempPath(), "admgr_rbac_" + Guid.NewGuid().ToString("N") + ".json");

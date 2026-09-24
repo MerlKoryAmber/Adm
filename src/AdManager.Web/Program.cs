@@ -27,14 +27,29 @@ builder.Services.AddSingleton(uiOpt);
 builder.Services.AddSingleton<IOperationalCredentialProvider, ConfiguredCredentialProvider>();
 builder.Services.AddScoped<IAdService, AdService>();
 builder.Services.AddScoped<IAdDirectory, AdDirectory>();
-// Провайдер аудита: ADMGR_AUDIT=Ef (LocalDB/SQL, по умолчанию) | File (JSONL, без БД — для IIS-лабы).
+// Провайдер аудита: ADMGR_AUDIT=Ef (SQL, по умолчанию) | File (JSONL, без БД).
 var auditProvider = Environment.GetEnvironmentVariable("ADMGR_AUDIT")
                     ?? builder.Configuration["Audit:Provider"] ?? "Ef";
 var useEfAudit = auditProvider.Equals("Ef", StringComparison.OrdinalIgnoreCase);
+
+// Провайдер состояния (RBAC/Settings/Automation/Templates): ADMGR_STORE=Ef (SQL, по умолчанию) | File (App_Data/*.json).
+// ADR-0006: состояние — в БД. File остаётся для dev/no-auth и как fallback.
+var storeProvider = Environment.GetEnvironmentVariable("ADMGR_STORE")
+                    ?? builder.Configuration["Store:Provider"] ?? "Ef";
+var useEfStore = storeProvider.Equals("Ef", StringComparison.OrdinalIgnoreCase);
+
+var needsDb = useEfAudit || useEfStore;
+if (needsDb)
+{
+    // Фабрика (для документных сторов из любого контекста, в т.ч. singleton BackgroundService)
+    // + scoped-контекст (для EfAuditLog).
+    builder.Services.AddDbContextFactory<AdManagerDbContext>(o =>
+        o.UseSqlServer(builder.Configuration.GetConnectionString("AdManagerDb")));
+    builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AdManagerDbContext>>().CreateDbContext());
+}
+
 if (useEfAudit)
 {
-    builder.Services.AddDbContext<AdManagerDbContext>(o =>
-        o.UseSqlServer(builder.Configuration.GetConnectionString("AdManagerDb")));
     builder.Services.AddScoped<IAuditLog, EfAuditLog>();
 }
 else
@@ -92,7 +107,10 @@ var rbacOpt = builder.Configuration.GetSection("Rbac").Get<RbacOptions>() ?? new
 builder.Services.AddSingleton(rbacOpt);
 var rbacPath = builder.Configuration["Rbac:FilePath"]
                ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "rbac.json");
-builder.Services.AddSingleton<IRbacStore>(new FileRbacStore(rbacPath));
+if (useEfStore)
+    builder.Services.AddSingleton<IRbacStore, EfRbacStore>();
+else
+    builder.Services.AddSingleton<IRbacStore>(new FileRbacStore(rbacPath));
 if (requireAuth)
     builder.Services.AddScoped<IRbacEngine, RbacEngine>();
 else
@@ -101,12 +119,18 @@ else
 // Automation (планировщик + правила, без апрувов).
 var autoPath = builder.Configuration["Automation:FilePath"]
                ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "automation.json");
-builder.Services.AddSingleton<IAutomationStore>(new FileAutomationStore(autoPath));
+if (useEfStore)
+    builder.Services.AddSingleton<IAutomationStore, EfAutomationStore>();
+else
+    builder.Services.AddSingleton<IAutomationStore>(new FileAutomationStore(autoPath));
 
 // Шаблоны формы пользователя (Layout View).
 var tplPath = builder.Configuration["Templates:FilePath"]
               ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "user-templates.json");
-builder.Services.AddSingleton<IUserTemplateStore>(new FileUserTemplateStore(tplPath));
+if (useEfStore)
+    builder.Services.AddSingleton<IUserTemplateStore, EfUserTemplateStore>();
+else
+    builder.Services.AddSingleton<IUserTemplateStore>(new FileUserTemplateStore(tplPath));
 
 builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
@@ -115,7 +139,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationSchedule
 // Settings + напоминатель истечения пароля (SMTP).
 var settingsPath = builder.Configuration["Settings:FilePath"]
                    ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "app-settings.json");
-builder.Services.AddSingleton<ISettingsStore>(new FileSettingsStore(settingsPath));
+if (useEfStore)
+    builder.Services.AddSingleton<ISettingsStore, EfSettingsStore>();
+else
+    builder.Services.AddSingleton<ISettingsStore>(new FileSettingsStore(settingsPath));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IPasswordExpiryService, PasswordExpiryService>();
 builder.Services.AddSingleton<PasswordExpiryNotifier>();
@@ -126,8 +153,8 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
 
-// Создать схему аудита (EnsureCreated; миграции — позже). Только для EF-провайдера.
-if (useEfAudit)
+// Создать схему БД (EnsureCreated; миграции — позже). Для любого EF-провайдера (аудит или сторы).
+if (needsDb)
 {
     try
     {

@@ -15,8 +15,17 @@ public sealed class AdManagerDbContext : DbContext
 
     public DbSet<AuditEntry> Audit => Set<AuditEntry>();
 
+    /// <summary>Состояние приложения (rbac/settings/automation/templates) — JSON-документы (ADR-0006).</summary>
+    public DbSet<AppStateEntry> AppState => Set<AppStateEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var s = modelBuilder.Entity<AppStateEntry>();
+        s.ToTable("AppState");
+        s.HasKey(x => x.Key);
+        s.Property(x => x.Key).HasMaxLength(64);
+        s.Property(x => x.Json).HasColumnType("nvarchar(max)");
+
         var e = modelBuilder.Entity<AuditEntry>();
         e.ToTable("AuditEntries");
         e.HasKey(x => x.Id);

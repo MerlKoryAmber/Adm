@@ -60,8 +60,9 @@ Log "app pool '$pool' created (ApplicationPoolIdentity)"
 $appcmd = "$env:windir\System32\inetsrv\appcmd.exe"
 & $appcmd set config -section:system.applicationHost/applicationPools "/+[name='$pool'].environmentVariables.[name='ADMGR_AUTH',value='IIS']" /commit:apphost | Out-Null
 & $appcmd set config -section:system.applicationHost/applicationPools "/+[name='$pool'].environmentVariables.[name='ASPNETCORE_ENVIRONMENT',value='Production']" /commit:apphost | Out-Null
-& $appcmd set config -section:system.applicationHost/applicationPools "/+[name='$pool'].environmentVariables.[name='ADMGR_AUDIT',value='File']" /commit:apphost | Out-Null
-Log "app pool env vars set (ADMGR_AUTH=IIS, ASPNETCORE_ENVIRONMENT=Production, ADMGR_AUDIT=File)"
+& $appcmd set config -section:system.applicationHost/applicationPools "/+[name='$pool'].environmentVariables.[name='ADMGR_AUDIT',value='Ef']" /commit:apphost | Out-Null
+& $appcmd set config -section:system.applicationHost/applicationPools "/+[name='$pool'].environmentVariables.[name='ADMGR_STORE',value='Ef']" /commit:apphost | Out-Null
+Log "app pool env vars set (ADMGR_AUTH=IIS, ASPNETCORE_ENVIRONMENT=Production, ADMGR_AUDIT=Ef, ADMGR_STORE=Ef)"
 
 # 6) (re)create site
 if (Test-Path "IIS:\Sites\$site") { Remove-Website -Name $site; Log "removed old site" }

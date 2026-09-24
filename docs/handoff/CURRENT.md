@@ -25,6 +25,8 @@
 - **Graphify** настроен для репо (скилл + strict + git-хуки + merge-driver), `docs/architecture-map.md`.
 
 ## Сделано в сессии 2026-09-24
+- **Всё состояние → SQL (ADR-0006)**: установлен **SQL Server 2025 Express** (служба, `build/install-sqlexpress.ps1`, БД `AdManager`, грант `IIS APPPOOL\admanager`). Все 4 стора (RBAC/Settings/Automation/Templates) + аудит — в БД: `AdManagerDbContext.AppState` (JSON-документы) + `EfAppStateStore<T>` через `IDbContextFactory`; EF-реализации `EfRbacStore`/`EfSettingsStore`/`EfAutomationStore`/`EfUserTemplateStore`. Переключатель `ADMGR_STORE=Ef|File` (дефолт Ef), IIS ставит `ADMGR_AUDIT=Ef` + `ADMGR_STORE=Ef`. Connection string → `.\SQLEXPRESS`. Проверено: роль пишется в SQL (таблица AppState). **Осталось по ADR-0006**: шифрование секретов (AES-ключ вне БД), бэкап/DR-процедура, сидер миграции с файлов.
+- **Super-admin через роль**: `HelpDeskRole.IsSuperAdmin` (галка в UI, бейдж, `RbacEngine.HasSuperAdminRole`). Bootstrap `RbacOptions.SuperAdmins` = merl + MerlKory (только когда БД пуста). Тесты RbacEngine 13/13.
 - **RBAC-фильтрация UI по правам**: техник видит только делегированные разделы. `RbacEngine.EffectiveAccessAsync` → `EffectiveAccess`; меню (`MainLayout`, грузится в OnAfterRender — AuthState на пререндере пуст) и все чувствительные страницы (`RequireAccess`-гард, 25 страниц) фильтруются. Новые Permission на разделы (ViewReports/ManageDelegation/ManageAutomation/ManageSettings/ManagePasswordExpiry, группа Administration). Админ-разделы теперь делегируются ролью, не хардкодом. Bootstrap-супер-админы: merl + **MerlKory** (локальный админ стенда). Тесты RbacEngine 12/12.
 - **Отключено браузерное кеширование** (middleware no-cache на все ответы).
 - **Delegation: убрано пустое боковое меню на Dashboard.**

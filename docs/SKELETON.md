@@ -19,7 +19,7 @@ Web ─► Infrastructure.* (DI-композиция)
 | `AdManager.Application` | net8.0 | Контракты + DTO + сервисы приложения (см. ниже). |
 | `AdManager.Infrastructure.Ad` | net8.0-windows | `AdService` (write S.DS), `AdDirectory` (чтение), `GpoDirectory`/`GpoService` (GPO+gPLink), `Ldap` (bind). |
 | `AdManager.Infrastructure.Exchange` | net8.0-windows | `ExchangeService` (remote PowerShell). **Рантайм не верифицирован** (нет сервера). |
-| `AdManager.Infrastructure.Data` | net8.0 | EF `AdManagerDbContext` + `EfAuditLog`; файловые сторы `FileAuditLog`, `FileRbacStore`, `FileAutomationStore`, `FileUserTemplateStore`. |
+| `AdManager.Infrastructure.Data` | net8.0 | EF `AdManagerDbContext` (`AuditEntries` + `AppState` JSON-документы); EF-сторы `EfAuditLog`, `EfRbacStore`, `EfSettingsStore`, `EfAutomationStore`, `EfUserTemplateStore` (база `EfAppStateStore<T>` через `IDbContextFactory`); файловые аналоги — для dev/no-auth. Провайдер: `ADMGR_STORE=Ef\|File`, `ADMGR_AUDIT=Ef\|File`. |
 | `AdManager.Infrastructure.Automation` | net8.0 | `AutomationScheduler` (BackgroundService + NCrontab). |
 | `AdManager.Web` | net8.0-windows | Blazor Server, Windows Auth, DI, страницы. |
 | `tests/AdManager.Domain.Tests` | net8.0 | xUnit (smoke). |
@@ -32,7 +32,7 @@ Web ─► Infrastructure.* (DI-композиция)
 - `IExchangeService` — mailbox enable/disable/props, distribution create/membership, права ящика (Full Access/Send As/Send on Behalf, `Permission.ManageMailboxPermissions`).
 - `IGpoDirectory` (+ `GpoDirectory`) — чтение GPO и линков (gPLink); `IGpoService` (+ `GpoService`) — link/unlink/enforce/enable. Обёртка `GpoManagementService` (RBAC+аудит, `Permission.ManageGpoLinks`). DTO `GpoSummary`/`GpoLink` (`Abstractions.Gpo.cs`).
 - `IRbacEngine` (+ `RbacEngine`, `AllowAllRbacEngine`) — авторизация операции + `AllowedFieldsAsync` (пополевые права) + `EnforcedTemplateAsync` (принудительный шаблон) + `EffectiveAccessAsync` (сводный доступ актора → `EffectiveAccess`, для фильтрации меню/страниц). Новые Permission на разделы: ViewReports/ManageDelegation/ManageAutomation/ManageSettings/ManagePasswordExpiry (группа Administration в UI ролей). Меню (`MainLayout`) и страницы (`RequireAccess`-гард) фильтруются по доступу. Супер-админы bootstrap — `RbacOptions.SuperAdmins` (merl, MerlKory); прочих админов заводят ролью. `HelpDeskRole.CreateUserFields`/`ModifyUserFields` (ключи FieldCatalog; пусто = все поля). `RoleAssignment.CreateTemplateId`/`ModifyTemplateId` — принудительный Form-template на Create/Modify (техник видит только его, селектор заблокирован). Enforcement: `AdManagementService` фильтрует атрибуты/спец-операции; формы Create/Modify скрывают запрещённые поля и лочат шаблон.
-- `IRbacStore` (+ `FileRbacStore`) — роли/scope/назначения.
+- `IRbacStore` (+ `EfRbacStore` [SQL, дефолт], `FileRbacStore` [dev]) — роли/scope/назначения. `HelpDeskRole.IsSuperAdmin` — роль полного доступа (bypass scope). Хранилище — ADR-0006 (JSON-документ в таблице `AppState`).
 - `IAuditLog` (+ `EfAuditLog`, `FileAuditLog`) — неизменяемый аудит (двухфазный).
 - `IOperationalCredentialProvider` (+ `ConfiguredCredentialProvider`) — gMSA / StoredCredential.
 - `IAutomationScheduler` (+ `AutomationScheduler`), `IAutomationStore` (+ `FileAutomationStore`).
