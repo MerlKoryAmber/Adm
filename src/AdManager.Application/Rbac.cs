@@ -168,6 +168,8 @@ public sealed class RbacEngine : IRbacEngine
 
     private bool IsSuperAdmin(TechnicianContext actor)
     {
+        // Локальная УЗ панели с флагом супер-админа (ADR-0007) — приходит из claim при логине.
+        if (actor.IsSuperAdmin) return true;
         if (string.Equals(actor.Sid, _options.AutomationSid, StringComparison.Ordinal)) return true;
         var sam = Sam(actor.DisplayName) ?? Sam(actor.Upn);
         if (sam is not null && _options.SuperAdmins.Any(s => string.Equals(s, sam, StringComparison.OrdinalIgnoreCase)))

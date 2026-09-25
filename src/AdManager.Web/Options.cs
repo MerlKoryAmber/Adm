@@ -54,6 +54,9 @@ public static class CurrentUser
 
     private const string GroupSidClaim = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid";
 
+    /// <summary>Claim супер-админа для локальных УЗ панели (ADR-0007).</summary>
+    public const string SuperAdminClaim = "admgr:super";
+
     public static TechnicianContext From(ClaimsPrincipal? principal)
     {
         var name = principal?.Identity?.Name ?? "unknown";
@@ -63,6 +66,7 @@ public static class CurrentUser
         var groups = principal?.FindAll(ClaimTypes.GroupSid).Select(c => c.Value)
                      .Concat(principal.FindAll(GroupSidClaim).Select(c => c.Value))
                      .Distinct().ToList() ?? new List<string>();
-        return new TechnicianContext(sid, name, name, groups);
+        var isSuper = principal?.FindFirst(SuperAdminClaim)?.Value == "true";
+        return new TechnicianContext(sid, name, name, groups, isSuper);
     }
 }

@@ -6,7 +6,7 @@ namespace AdManager.Application.Abstractions;
 
 // ---------- DTO ----------
 
-public sealed record TechnicianContext(string Sid, string Upn, string DisplayName, IReadOnlyCollection<string>? GroupSids = null);
+public sealed record TechnicianContext(string Sid, string Upn, string DisplayName, IReadOnlyCollection<string>? GroupSids = null, bool IsSuperAdmin = false);
 
 public sealed record AuthorizationDecision(bool Allowed, string? Reason = null);
 

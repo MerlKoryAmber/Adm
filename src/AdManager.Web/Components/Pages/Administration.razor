@@ -1,0 +1,172 @@
+@page "/administration"
+@inject ILocalUserStore LocalUsers
+@inject ILocalAuthService LocalAuth
+@inject IRbacStore Rbac
+
+<PageTitle>Administration — admanager</PageTitle>
+<h1>Panel users</h1>
+<RequireAccess Permissions="new[] { Permission.ManageDelegation }">
+<p class="subtitle">Local panel accounts (sign in with user name / password) and domain subjects that have role assignments. Local accounts are stored in the panel database (ADR-0007).</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:820px">
+    <h3>Local accounts</h3>
+    @if (locals is null) { <p>Loading…</p> }
+    else if (locals.Count == 0) { <p class="muted">No local accounts.</p> }
+    else
+    {
+        <table><thead><tr><th>User name</th><th>Display name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var u in locals)
+            {
+                <tr>
+                    <td><b>@u.UserName</b></td>
+                    <td>@u.DisplayName</td>
+                    <td>@if (u.IsSuperAdmin) { <span class="badge warn">Super admin</span> } else { <span class="muted">—</span> }</td>
+                    <td>@if (u.Disabled) { <span class="badge">Disabled</span> } else { <span class="badge ok">Enabled</span> }</td>
+                    <td style="white-space:nowrap">
+                        <button @onclick="() => ToggleDisabled(u)">@(u.Disabled ? "Enable" : "Disable")</button>
+                        <button @onclick="() => StartResetPw(u.Id)">Reset password</button>
+                        @if (confirmDelete == u.Id)
+                        {
+                            <button class="danger" @onclick="() => DeleteLocal(u.Id)">Confirm delete</button>
+                            <button @onclick="() => confirmDelete = null">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="danger" @onclick="() => confirmDelete = u.Id">Delete</button>
+                        }
+                    </td>
+                </tr>
+                @if (resetPwId == u.Id)
+                {
+                    <tr><td colspan="5">
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <input type="password" placeholder="new password" @bind="resetPwValue" />
+                            <button class="primary" @onclick="() => ApplyResetPw(u)" disabled="@string.IsNullOrEmpty(resetPwValue)">Set password</button>
+                            <button @onclick="() => resetPwId = null">Cancel</button>
+                        </div>
+                    </td></tr>
+                }
+            }
+        </tbody></table>
+    }
+
+    <hr />
+    <h3>New local account</h3>
+    <div class="grid2" style="max-width:560px">
+        <div>
+            <label>User name</label>
+            <input type="text" @bind="newName" placeholder="operator1" />
+            <div class="hint">Login name for the panel (not an AD account).</div>
+        </div>
+        <div>
+            <label>Display name</label>
+            <input type="text" @bind="newDisplay" placeholder="Operator One" />
+        </div>
+    </div>
+    <div class="grid2" style="max-width:560px">
+        <div>
+            <label>Password</label>
+            <input type="password" @bind="newPass" />
+            <div class="hint">Stored as a PBKDF2 hash (not reversible).</div>
+        </div>
+        <div>
+            <div class="checkbox" style="margin-top:26px"><input type="checkbox" id="nsuper" @bind="newSuper" /><label for="nsuper">Super admin</label></div>
+        </div>
+    </div>
+    <div class="btnrow"><button class="primary" @onclick="CreateLocal" disabled="@(string.IsNullOrWhiteSpace(newName) || string.IsNullOrEmpty(newPass))">Create local account</button></div>
+</div>
+
+<div class="panel" style="max-width:820px;margin-top:16px">
+    <h3>Domain subjects with access</h3>
+    <div class="hint">Domain users / groups that have role assignments (managed in Delegation). Domain admins and bootstrap super-admins also have full access.</div>
+    @if (domainSubjects is null) { <p>Loading…</p> }
+    else if (domainSubjects.Count == 0) { <p class="muted">No domain assignments yet. Add them in Delegation → Assignments.</p> }
+    else
+    {
+        <table><thead><tr><th>Subject</th><th>SID</th></tr></thead><tbody>
+            @foreach (var s in domainSubjects)
+            {
+                <tr><td>@s.Name</td><td class="muted">@s.Sid</td></tr>
+            }
+        </tbody></table>
+    }
+</div>
+</RequireAccess>
+
+@code {
+    private List<LocalUser>? locals;
+    private List<(string Name, string Sid)>? domainSubjects;
+    private string? banner; private bool ok;
+    private Guid? confirmDelete;
+    private Guid? resetPwId; private string resetPwValue = "";
+
+    private string newName = ""; private string newDisplay = ""; private string newPass = ""; private bool newSuper;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        locals = (await LocalUsers.ListAsync()).OrderBy(u => u.UserName).ToList();
+        var cfg = await Rbac.LoadAsync();
+        domainSubjects = cfg.Assignments
+            .Select(a => (Name: a.SubjectName ?? a.SubjectSid, Sid: a.SubjectSid))
+            .Where(s => !s.Sid.StartsWith("LOCAL:", StringComparison.Ordinal))
+            .DistinctBy(s => s.Sid)
+            .OrderBy(s => s.Name)
+            .ToList();
+    }
+
+    private async Task CreateLocal()
+    {
+        try
+        {
+            if ((await LocalUsers.GetByNameAsync(newName)) is not null)
+            { ok = false; banner = $"User '{newName}' already exists."; return; }
+
+            var u = new LocalUser
+            {
+                UserName = newName.Trim(),
+                DisplayName = string.IsNullOrWhiteSpace(newDisplay) ? newName.Trim() : newDisplay.Trim(),
+                IsSuperAdmin = newSuper,
+                PasswordHash = LocalAuth.HashPassword(newPass),
+            };
+            await LocalUsers.SaveAsync(u);
+            newName = newDisplay = newPass = ""; newSuper = false;
+            ok = true; banner = "Local account created.";
+            await Load();
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task ToggleDisabled(LocalUser u)
+    {
+        u.Disabled = !u.Disabled;
+        await LocalUsers.SaveAsync(u);
+        ok = true; banner = $"{u.UserName} {(u.Disabled ? "disabled" : "enabled")}.";
+        await Load();
+    }
+
+    private void StartResetPw(Guid id) { resetPwId = id; resetPwValue = ""; }
+
+    private async Task ApplyResetPw(LocalUser u)
+    {
+        u.PasswordHash = LocalAuth.HashPassword(resetPwValue);
+        await LocalUsers.SaveAsync(u);
+        resetPwId = null; resetPwValue = "";
+        ok = true; banner = $"Password updated for {u.UserName}.";
+    }
+
+    private async Task DeleteLocal(Guid id)
+    {
+        await LocalUsers.DeleteAsync(id);
+        confirmDelete = null;
+        ok = true; banner = "Local account deleted.";
+        await Load();
+    }
+}

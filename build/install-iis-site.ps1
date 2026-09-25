@@ -46,6 +46,13 @@ try {
 & icacls "$dst\App_Data" /grant "IIS_IUSRS:(OI)(CI)M" /C | Out-Null
 Log "ACLs set for IIS_IUSRS (RX on app, M on logs+App_Data)"
 
+# 3a) keyring (ADR-0006): AES key lives OUTSIDE the site, in ProgramData.
+#     App pool must be able to create/read/rotate it. Default matches ADMGR_KEYRING default.
+$keyring = Join-Path $env:ProgramData 'AdManager\keyring'
+New-Item -ItemType Directory -Force -Path $keyring | Out-Null
+& icacls $keyring /grant "IIS_IUSRS:(OI)(CI)M" /C | Out-Null
+Log "keyring dir ensured + ACL for IIS_IUSRS: $keyring"
+
 Import-Module WebAdministration -ErrorAction SilentlyContinue
 
 # 4) (re)create app pool
@@ -69,10 +76,12 @@ if (Test-Path "IIS:\Sites\$site") { Remove-Website -Name $site; Log "removed old
 New-Website -Name $site -PhysicalPath $dst -ApplicationPool $pool -Port $port -Force | Out-Null
 Log "site '$site' created on port $port -> $dst"
 
-# 7) Windows Auth on, Anonymous off
-Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/anonymousAuthentication' -Name enabled -Value $false -PSPath 'IIS:\' -Location $site
-Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/windowsAuthentication' -Name enabled -Value $true  -PSPath 'IIS:\' -Location $site
-Log "auth: Windows enabled, Anonymous disabled"
+# 7) Mixed auth (ADR-0007): BOTH Anonymous and Windows enabled.
+#    App decides: domain users get Windows SSO, local accounts sign in via /login (cookie).
+#    Anonymous must be ON so /login is reachable without a Windows identity.
+Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/anonymousAuthentication' -Name enabled -Value $true -PSPath 'IIS:\' -Location $site
+Set-WebConfigurationProperty -Filter '/system.webServer/security/authentication/windowsAuthentication' -Name enabled -Value $true -PSPath 'IIS:\' -Location $site
+Log "auth: Windows + Anonymous both enabled (mixed, ADR-0007)"
 
 # 8) start
 Start-WebAppPool -Name $pool -ErrorAction SilentlyContinue

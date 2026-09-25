@@ -16,11 +16,15 @@
             @if (access.Can(Permission.ManageAutomation)) { <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a> }
             @if (access.Can(Permission.ManagePasswordExpiry)) { <a class="tab @(Section == "PasswordExpiry" ? "active" : null)" href="password-expiry">Password Expiry</a> }
             @if (access.Can(Permission.ManageSettings)) { <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a> }
+            @if (access.Can(Permission.ManageDelegation)) { <a class="tab @(Section == "Administration" ? "active" : null)" href="administration">Administration</a> }
         </nav>
         <div class="topright">
             <span class="domainchip">Domain: @Ui.Domain</span>
             <AuthorizeView>
-                <Authorized><span class="who">@context.User.Identity?.Name</span></Authorized>
+                <Authorized>
+                    <span class="who">@context.User.Identity?.Name</span>
+                    <form method="post" action="/logout" style="display:inline;margin:0"><button type="submit" class="linkbtn">Sign out</button></form>
+                </Authorized>
                 <NotAuthorized><span class="who">not signed in</span></NotAuthorized>
             </AuthorizeView>
         </div>
@@ -131,6 +135,7 @@
             if (p.StartsWith("automation")) return "Automation";
             if (p.StartsWith("password-expiry")) return "PasswordExpiry";
             if (p.StartsWith("settings")) return "Settings";
+            if (p.StartsWith("administration")) return "Administration";
             return "Management";
         }
     }

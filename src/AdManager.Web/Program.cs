@@ -6,6 +6,8 @@ using AdManager.Infrastructure.Data;
 using AdManager.Infrastructure.Exchange;
 using AdManager.Web;
 using AdManager.Web.Components;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +26,11 @@ builder.Services.AddSingleton(opOpt);
 builder.Services.AddSingleton(uiOpt);
 
 // Инфраструктура.
-builder.Services.AddSingleton<IOperationalCredentialProvider, ConfiguredCredentialProvider>();
+// Op-identity: хранимая УЗ читается из БД (settings-стор), .env — bootstrap-fallback (ADR-0006).
+builder.Services.AddSingleton<IOperationalCredentialProvider>(sp =>
+    new ConfiguredCredentialProvider(
+        sp.GetRequiredService<OperationalCredentialOptions>(),
+        sp.GetService<ISettingsStore>()));
 builder.Services.AddScoped<IAdService, AdService>();
 builder.Services.AddScoped<IAdDirectory, AdDirectory>();
 // Провайдер аудита: ADMGR_AUDIT=Ef (SQL, по умолчанию) | File (JSONL, без БД).
@@ -80,20 +86,44 @@ if (Environment.GetEnvironmentVariable("ADMGR_DEV_NOAUTH") == "1") authMode = "N
 authMode ??= "Negotiate";
 var requireAuth = authMode is "IIS" or "Negotiate";
 
+// Смешанная аутентификация (ADR-0007): Windows Auth (доменные SSO) + cookie (локальные УЗ).
+// Cookie-схема регистрируется во всех защищённых режимах — по ней входят локальные УЗ через /login.
+const string CookieScheme = "AdmgrCookie";
 if (authMode == "IIS")
 {
-    builder.Services.AddAuthentication(Microsoft.AspNetCore.Server.IIS.IISServerDefaults.AuthenticationScheme);
+    // Default scheme (Windows/IIS) authenticates domain SSO; unauthenticated requests
+    // are challenged on the cookie scheme -> redirected to /login for local accounts.
+    builder.Services.AddAuthentication(o =>
+        {
+            o.DefaultAuthenticateScheme = Microsoft.AspNetCore.Server.IIS.IISServerDefaults.AuthenticationScheme;
+            o.DefaultChallengeScheme = CookieScheme;
+        })
+        .AddCookie(CookieScheme, o => { o.LoginPath = "/login"; o.LogoutPath = "/logout"; o.AccessDeniedPath = "/login"; });
 }
 else if (authMode == "Negotiate")
 {
-    builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
+    builder.Services.AddAuthentication(o =>
+        {
+            o.DefaultAuthenticateScheme = NegotiateDefaults.AuthenticationScheme;
+            o.DefaultChallengeScheme = CookieScheme;
+        })
+        .AddNegotiate()
+        .AddCookie(CookieScheme, o => { o.LoginPath = "/login"; o.LogoutPath = "/logout"; o.AccessDeniedPath = "/login"; });
 }
 
 if (requireAuth)
 {
+    // Windows-схема зависит от режима хостинга.
+    var winScheme = authMode == "IIS"
+        ? Microsoft.AspNetCore.Server.IIS.IISServerDefaults.AuthenticationScheme
+        : NegotiateDefaults.AuthenticationScheme;
     builder.Services.AddAuthorization(options =>
     {
-        options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+        // Аутентифицирован ЛЮБОЙ из схем: Windows SSO ИЛИ локальный cookie (ADR-0007).
+        // Обе схемы явно в политике — иначе cookie-принципал не виден (проверяется только дефолтная).
+        options.FallbackPolicy = new AuthorizationPolicyBuilder(winScheme, CookieScheme)
+            .RequireAuthenticatedUser()
+            .Build();
     });
 }
 else
@@ -101,6 +131,13 @@ else
     builder.Services.AddAuthorization();
 }
 builder.Services.AddCascadingAuthenticationState();
+
+// Локальные УЗ панели (ADR-0007): стор + auth-сервис. Только в Ef-режиме (в БД).
+if (useEfStore)
+{
+    builder.Services.AddSingleton<ILocalUserStore, EfLocalUserStore>();
+    builder.Services.AddSingleton<ILocalAuthService, LocalAuthService>();
+}
 
 // RBAC (делегирование): под auth — реальный движок; в dev/no-auth — allow-all.
 var rbacOpt = builder.Configuration.GetSection("Rbac").Get<RbacOptions>() ?? new RbacOptions();
@@ -136,13 +173,33 @@ builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationScheduler>());
 
+// Шифрование секретов (ADR-0006, envelope): keyring вне БД + protector.
+// Путь keyring: ADMGR_KEYRING | конфиг | дефолт C:\ProgramData\AdManager\keyring.
+// Ключ НЕ в каталоге сайта: переживает деплой, не попадает в publish.
+var keyringDir = Environment.GetEnvironmentVariable("ADMGR_KEYRING")
+                 ?? builder.Configuration["Secrets:KeyringDir"]
+                 ?? Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        "AdManager", "keyring");
+var keyring = new DpapiKeyring(keyringDir);
+builder.Services.AddSingleton<DpapiKeyring>(keyring);
+builder.Services.AddSingleton<IKeyring>(keyring);
+builder.Services.AddSingleton<ISecretProtector>(new EnvelopeSecretProtector(keyring));
+
 // Settings + напоминатель истечения пароля (SMTP).
+// ISettingsStore оборачивается EncryptedSettingsStore — секреты шифруются на входе в стор.
 var settingsPath = builder.Configuration["Settings:FilePath"]
                    ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "app-settings.json");
 if (useEfStore)
-    builder.Services.AddSingleton<ISettingsStore, EfSettingsStore>();
+    builder.Services.AddSingleton<ISettingsStore>(sp =>
+        new EncryptedSettingsStore(
+            ActivatorUtilities.CreateInstance<EfSettingsStore>(sp),
+            sp.GetRequiredService<ISecretProtector>()));
 else
-    builder.Services.AddSingleton<ISettingsStore>(new FileSettingsStore(settingsPath));
+    builder.Services.AddSingleton<ISettingsStore>(sp =>
+        new EncryptedSettingsStore(
+            new FileSettingsStore(settingsPath),
+            sp.GetRequiredService<ISecretProtector>()));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IPasswordExpiryService, PasswordExpiryService>();
 builder.Services.AddSingleton<PasswordExpiryNotifier>();
@@ -164,6 +221,36 @@ if (needsDb)
     catch (Exception ex)
     {
         app.Logger.LogError(ex, "EnsureCreated failed");
+    }
+}
+
+// Одноразовый сидер: если Ef-сторы и в БД ещё нет состояния, а на диске лежат
+// непустые App_Data/*.json (прежний файловый режим) — импортировать их в БД (ADR-0006).
+// Идемпотентно: импорт только когда целевой стор пуст.
+if (useEfStore)
+{
+    try
+    {
+        var appData = Path.Combine(builder.Environment.ContentRootPath, "App_Data");
+        await StateSeeder.SeedFromFilesAsync(app.Services, appData, app.Logger);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "State seeding from files failed");
+    }
+}
+
+// Сид локального admin/admin при пустой таблице локальных УЗ (ADR-0007).
+if (useEfStore)
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ILocalAuthService>().EnsureSeedAdminAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Local admin seeding failed");
     }
 }
 
@@ -190,6 +277,42 @@ if (requireAuth)
 app.UseAuthorization();
 app.UseAntiforgery();
 app.MapGet("/health", () => Results.Ok(new { status = "ok", ts = DateTimeOffset.UtcNow })).AllowAnonymous();
+
+// Локальный вход (ADR-0007): POST /login проверяет логин/пароль и ставит cookie.
+// GET /login отдаёт форму (Blazor-страница Login.razor, анонимна).
+if (useEfStore && requireAuth)
+{
+    app.MapPost("/auth/login", async (HttpContext ctx, ILocalAuthService auth) =>
+    {
+        var form = await ctx.Request.ReadFormAsync();
+        var user = form["user"].ToString();
+        var pass = form["pass"].ToString();
+        var returnUrl = form["returnUrl"].ToString();
+        if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/')) returnUrl = "/";
+
+        var local = await auth.ValidateAsync(user, pass);
+        if (local is null)
+            return Results.Redirect("/login?error=1&returnUrl=" + Uri.EscapeDataString(returnUrl));
+
+        var claims = new List<System.Security.Claims.Claim>
+        {
+            new(System.Security.Claims.ClaimTypes.Name, local.UserName),
+            new("http://schemas.microsoft.com/ws/2008/06/identity/claims/primarysid", local.Sid),
+        };
+        if (local.IsSuperAdmin) claims.Add(new(AdManager.Web.CurrentUser.SuperAdminClaim, "true"));
+        var identity = new System.Security.Claims.ClaimsIdentity(claims, "AdmgrCookie");
+        var principal = new System.Security.Claims.ClaimsPrincipal(identity);
+        await ctx.SignInAsync("AdmgrCookie", principal);
+        return Results.Redirect(returnUrl);
+    }).AllowAnonymous().DisableAntiforgery();
+
+    app.MapPost("/logout", async (HttpContext ctx) =>
+    {
+        await ctx.SignOutAsync("AdmgrCookie");
+        return Results.Redirect("/login");
+    });
+}
+
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();
