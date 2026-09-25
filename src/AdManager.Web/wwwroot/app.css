@@ -35,6 +35,14 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.7); opacit
 .tab { display: flex; align-items: center; padding: 0 18px; color: var(--muted); text-decoration: none; font-size: 14px; border-bottom: 3px solid transparent; }
 .tab:hover { background: rgba(255,255,255,.05); color: var(--text); }
 .tab.active { color: #eef2f7; border-bottom-color: var(--accent); background: rgba(201,169,110,.08); }
+/* In-panel sub-tabs (e.g. New role: Permissions / Create fields / Modify fields) */
+.subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 6px 0 14px; }
+.subtab { padding: 7px 14px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; }
+.subtab:hover { color: var(--text); }
+.subtab.active { color: #eef2f7; border-bottom-color: var(--accent); }
+.subtab:disabled { opacity: .4; cursor: default; }
+.subtab .badge { background: var(--accent-light); color: var(--accent); margin-left: 4px; padding: 0 6px; }
+
 .topright { margin-left: auto; display: flex; align-items: center; gap: 14px; padding: 0 18px; font-size: 13px; }
 .domainchip { background: var(--accent-light); color: var(--accent); padding: 4px 10px; border-radius: 4px; }
 .who { color: var(--muted); }
@@ -156,3 +164,14 @@ table.lh td { width: 15px; height: 15px; border: 1px solid var(--border); cursor
 table.lh td.on { background: var(--ok); }
 table.lh td.off { background: var(--surface-hover); }
 table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); }
+
+/* Login screen (ADR-0007) */
+.login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; }
+.login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 28px; }
+.login-logo { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.login-logo span { color: var(--accent); }
+.login-sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+.login-card label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+.login-card input[type=text], .login-card input[type=password] { width: 100%; box-sizing: border-box; }
+.linkbtn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 0 0 10px; }
+.linkbtn:hover { color: var(--accent); text-decoration: underline; }

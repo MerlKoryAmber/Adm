@@ -44,31 +44,50 @@ else
             <hr />
             <h3>New role</h3>
             <label>Name</label><input type="text" @bind="roleName" placeholder="Help Desk L1" />
-            <label>Permissions</label>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:4px">
+
+            <div class="checkbox" style="margin-top:10px"><input type="checkbox" id="super" @bind="roleIsSuper" /><label for="super">Super admin (full access, bypasses scope)</label></div>
+            <div class="hint">Grants complete access like a built-in administrator. Assign to your admins. Individual permissions below are ignored for a super-admin role.</div>
+
+            @if (!roleIsSuper)
+            {
+                // активная вкладка по умолчанию — первая группа
+                if (string.IsNullOrEmpty(permTab)) { permTab = PermissionGroups[0].Group; }
+                <label style="margin-top:14px;display:block">Permissions</label>
+                <div class="subtabs" style="flex-wrap:wrap">
+                    @foreach (var (group, perms) in PermissionGroups)
+                    {
+                        var count = perms.Count(rolePerms.Contains);
+                        <button class="subtab @(permTab == group ? "active" : "")" @onclick="() => permTab = group">
+                            @group @if (count > 0) { <span class="badge">@count</span> }
+                        </button>
+                    }
+                </div>
+
                 @foreach (var (group, perms) in PermissionGroups)
                 {
-                    <div>
-                        <div class="treegroup" style="margin:2px 0">@group</div>
-                        @foreach (var p in perms)
-                        {
-                            <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
-                                <input type="checkbox" checked="@rolePerms.Contains(p)" @onchange="e => TogglePerm(p, e)" /> @PermissionLabel(p)
-                            </label>
-                        }
-                    </div>
+                    @if (permTab == group)
+                    {
+                        <div style="margin-top:4px">
+                            @foreach (var p in perms)
+                            {
+                                <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:4px 0">
+                                    <input type="checkbox" checked="@rolePerms.Contains(p)" @onchange="e => TogglePerm(p, e)" /> @PermissionLabel(p)
+                                </label>
+                            }
+                        </div>
+                    }
                 }
-            </div>
-            @if (rolePerms.Contains(Permission.CreateUser))
-            {
-                <FieldPicker Title="Create user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="createFields" />
+
+                @if (rolePerms.Contains(Permission.CreateUser))
+                {
+                    <FieldPicker Title="Create user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="createFields" />
+                }
+                @if (rolePerms.Contains(Permission.ModifyAttributes))
+                {
+                    <FieldPicker Title="Modify users — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
+                }
             }
-            @if (rolePerms.Contains(Permission.ModifyAttributes))
-            {
-                <FieldPicker Title="Modify users — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
-            }
-            <div class="checkbox" style="margin-top:10px"><input type="checkbox" id="super" @bind="roleIsSuper" /><label for="super">Super admin (full access, bypasses scope)</label></div>
-            <div class="hint">Grants complete access like a built-in administrator. Assign to your admins. Individual permissions above are ignored for a super-admin role.</div>
+
             <div class="btnrow"><button class="primary" @onclick="CreateRole" disabled="@(string.IsNullOrWhiteSpace(roleName) || (rolePerms.Count == 0 && !roleIsSuper))">Create role</button></div>
         </div>
     }
@@ -271,6 +290,7 @@ else
 
     private string roleName = "";
     private bool roleIsSuper;
+    private string permTab = "";   // активная вкладка группы прав (по имени группы)
     private readonly HashSet<Permission> rolePerms = new();
     private readonly HashSet<string> createFields = new();
     private readonly HashSet<string> modifyFields = new();
