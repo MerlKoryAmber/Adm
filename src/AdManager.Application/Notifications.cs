@@ -53,14 +53,54 @@ public sealed class HttpsSettings
     public int HttpsPort { get; set; } = 443;
 }
 
+/// <summary>Хранимая доменная УЗ для operational identity (альтернатива gMSA).
+/// Пароль — секрет, шифруется envelope (ADR-0006). Пусто/Mode=gMSA — работаем без пароля.</summary>
+public sealed class StoredCredentialSettings
+{
+    /// <summary>gMSA (по умолчанию, без пароля) | StoredCredential (доменная УЗ с паролем).</summary>
+    public string Mode { get; set; } = "gMSA";
+    public string? User { get; set; }
+    public string? Password { get; set; } // секрет: шифруется envelope
+    public string Domain { get; set; } = "";
+
+    public bool IsStored => string.Equals(Mode, "StoredCredential", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrEmpty(User);
+}
+
 /// <summary>Рантайм-настройки приложения (файловый стор).</summary>
 public sealed class AppSettings
 {
     public SmtpSettings Smtp { get; set; } = new();
     public HttpsSettings Https { get; set; } = new();
     public PasswordExpiryPolicy PasswordExpiry { get; set; } = new();
+    /// <summary>Operational identity: gMSA или хранимая УЗ (ADR-0006, из .env перенесено в БД).</summary>
+    public StoredCredentialSettings OperationalCredential { get; set; } = new();
     public DateTime? LastRunUtc { get; set; }
     public string? LastRunResult { get; set; }
+}
+
+/// <summary>Защита секретов: envelope encryption (AES-256-GCM, ключ вне БД — ADR-0006).
+/// Реализация в Infrastructure. Protect отдаёт самоописывающий токен (префикс версии),
+/// Unprotect понимает и токен, и legacy-plain (обратная совместимость при миграции).</summary>
+public interface ISecretProtector
+{
+    /// <summary>Зашифровать секрет. null/пусто возвращается как есть.</summary>
+    string? Protect(string? plaintext);
+    /// <summary>Расшифровать. Значение без префикса-токена считается legacy-plain и возвращается как есть.</summary>
+    string? Unprotect(string? stored);
+    /// <summary>true, если строка — уже зашифрованный токен этого протектора.</summary>
+    bool IsProtected(string? value);
+}
+
+/// <summary>Управление ключом шифрования секретов (keyring, ADR-0006): бэкап и ротация.</summary>
+public interface IKeyring
+{
+    /// <summary>Сгенерировать новый ключ, вернув старый (для пере-шифровки). Ключ на диске обновляется.</summary>
+    byte[] Rotate();
+    /// <summary>Экспорт текущего ключа для резервной копии (сырые байты; хранить раздельно от БД).</summary>
+    byte[] ExportKey();
+    /// <summary>Отпечаток текущего ключа (для отображения/сверки бэкапа, не сам ключ).</summary>
+    string KeyFingerprint();
 }
 
 public interface ISettingsStore

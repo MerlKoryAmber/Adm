@@ -33,19 +33,37 @@ public sealed class ExchangeOptions
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ConnectionUri);
 }
 
-/// <summary>Отдаёт identity для операций: процесс (gMSA) или хранимая УЗ.</summary>
+/// <summary>Отдаёт identity для операций: процесс (gMSA) или хранимая УЗ.
+/// Источник хранимой УЗ (ADR-0006): сначала БД (settings-стор, пароль расшифрован
+/// декоратором), при отсутствии — конфиг/.env как bootstrap-fallback.</summary>
 public sealed class ConfiguredCredentialProvider : IOperationalCredentialProvider
 {
     private readonly OperationalCredentialOptions _o;
-    public ConfiguredCredentialProvider(OperationalCredentialOptions o) => _o = o;
+    private readonly ISettingsStore? _settings;
+
+    public ConfiguredCredentialProvider(OperationalCredentialOptions o, ISettingsStore? settings = null)
+    {
+        _o = o;
+        _settings = settings;
+    }
 
     public OperationalIdentity GetIdentity(string domain)
     {
+        // 1) БД (рантайм-настройки). Singleton вне request-контекста — sync-ожидание безопасно.
+        if (_settings != null)
+        {
+            var sc = _settings.LoadAsync().GetAwaiter().GetResult().OperationalCredential;
+            if (sc.IsStored)
+                return new OperationalIdentity("StoredCredential", new NetworkCredential(sc.User, sc.Password, sc.Domain));
+        }
+
+        // 2) fallback: конфиг/.env (bootstrap до первой настройки в UI)
         if (string.Equals(_o.Mode, "StoredCredential", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrEmpty(_o.User))
         {
             return new OperationalIdentity("StoredCredential", new NetworkCredential(_o.User, _o.Password));
         }
+
         return new OperationalIdentity("gMSA", null);
     }
 }

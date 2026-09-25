@@ -1,10 +1,12 @@
 @page "/settings"
 @inject ISettingsStore Store
+@inject IKeyring Keyring
+@inject ISecretProtector Protector
 
 <PageTitle>Settings — admanager</PageTitle>
 <h1>Settings</h1>
 <RequireAccess Permissions="new[] { Permission.ManageSettings }">
-<p class="subtitle">Runtime settings for outgoing email (SMTP) and HTTPS/certificates. Stored in App_Data (lab).</p>
+<p class="subtitle">Runtime settings for email (SMTP), HTTPS/certificates, operational identity and secret encryption. Secrets are encrypted at rest (envelope, key outside the database).</p>
 
 @if (banner is not null)
 {
@@ -47,7 +49,7 @@ else
             <div>
                 <label>Password (optional)</label>
                 <input type="password" @bind="model.Smtp.Password" />
-                <div class="hint">Lab: stored in App_Data (gitignored). Production: DPAPI (see TODO).</div>
+                <div class="hint">SMTP auth password. Encrypted at rest (envelope, AES-256-GCM).</div>
             </div>
         </div>
     </div>
@@ -73,7 +75,7 @@ else
             <input type="text" @bind="model.Https.PfxPath" placeholder="C:\certs\admanager.pfx" />
             <label>PFX password</label>
             <input type="password" @bind="model.Https.PfxPassword" />
-            <div class="hint">Lab: stored in App_Data (gitignored). Production: DPAPI / secret store.</div>
+            <div class="hint">Password for the PFX file. Encrypted at rest (envelope, AES-256-GCM).</div>
         }
         else if (model.Https.CertificateSource == "Store")
         {
@@ -88,6 +90,58 @@ else
         <div class="banner" style="margin-top:10px">Note: certificate binding changes take effect at the web-host level (IIS site binding or Kestrel). This page stores the intended configuration.</div>
     </div>
 
+    <div class="panel" style="max-width:640px;margin-top:16px">
+        <h3>Operational identity</h3>
+        <div class="hint">Account used to perform AD/Exchange operations on behalf of technicians (never Domain Admin). Default is gMSA (no stored password).</div>
+
+        <label>Mode</label>
+        <select @bind="model.OperationalCredential.Mode">
+            <option value="gMSA">gMSA (group managed service account — no password)</option>
+            <option value="StoredCredential">Stored credential (domain account with password)</option>
+        </select>
+        <div class="hint">gMSA is recommended: the password is managed by AD and never stored here.</div>
+
+        @if (model.OperationalCredential.Mode == "StoredCredential")
+        {
+            <div class="grid2">
+                <div>
+                    <label>User</label>
+                    <input type="text" @bind="model.OperationalCredential.User" placeholder="svc-admanager" />
+                    <div class="hint">sAMAccountName or UPN of the operational account.</div>
+                </div>
+                <div>
+                    <label>Domain</label>
+                    <input type="text" @bind="model.OperationalCredential.Domain" placeholder="contoso.com" />
+                    <div class="hint">Account domain (NetBIOS or FQDN).</div>
+                </div>
+            </div>
+            <label>Password</label>
+            <input type="password" @bind="model.OperationalCredential.Password" />
+            <div class="hint">Password of the operational account. Encrypted at rest (envelope, AES-256-GCM).</div>
+        }
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-top:16px">
+        <h3>Secret encryption</h3>
+        <div class="hint">Secrets (SMTP / PFX / operational password) are encrypted with an application key stored outside the database. Back up the key separately from the database — see docs/backup-dr.md.</div>
+        <label>Key fingerprint</label>
+        <input type="text" value="@keyFingerprint" readonly />
+        <div class="hint">Short fingerprint of the current key (not the key itself). Use it to verify a key backup matches.</div>
+
+        <div class="btnrow" style="margin-top:12px">
+            @if (!confirmRotate)
+            {
+                <button class="danger" @onclick="() => confirmRotate = true">Rotate encryption key…</button>
+            }
+            else
+            {
+                <button class="danger" @onclick="RotateKey" disabled="@rotating">Confirm rotate key</button>
+                <button @onclick="() => confirmRotate = false" disabled="@rotating">Cancel</button>
+            }
+        </div>
+        <div class="hint">Generates a new key and re-encrypts all stored secrets with it. Back up the new key afterwards; the old key stops being used.</div>
+    </div>
+
     <div class="btnrow" style="margin-top:16px;max-width:640px">
         <button class="primary" @onclick="Save">Save settings</button>
     </div>
@@ -97,13 +151,39 @@ else
 @code {
     private AppSettings? model;
     private string? banner; private bool ok;
+    private bool confirmRotate; private bool rotating;
+    private string keyFingerprint = "";
 
-    protected override async Task OnInitializedAsync() => model = await Store.LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        model = await Store.LoadAsync();
+        keyFingerprint = Keyring.KeyFingerprint();
+    }
 
     private async Task Save()
     {
         if (model is null) return;
         try { await Store.SaveAsync(model); ok = true; banner = "Settings saved."; }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task RotateKey()
+    {
+        rotating = true;
+        try
+        {
+            // Порядок важен: сначала прочитать секреты СТАРЫМ ключом (декоратор
+            // расшифрует), затем сменить ключ, затем записать — декоратор зашифрует
+            // НОВЫМ ключом. Так все секреты в БД перешифровываются.
+            var current = await Store.LoadAsync();   // plaintext (old key)
+            Keyring.Rotate();                        // key changes on disk
+            await Store.SaveAsync(current);          // re-encrypted with new key
+            keyFingerprint = Keyring.KeyFingerprint();
+            model = await Store.LoadAsync();         // refresh view
+            ok = true;
+            banner = $"Encryption key rotated. New fingerprint: {keyFingerprint}. Back up the new key (docs/backup-dr.md).";
+        }
+        catch (Exception ex) { ok = false; banner = "Rotate failed: " + ex.Message; }
+        finally { rotating = false; confirmRotate = false; }
     }
 }
