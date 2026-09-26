@@ -2,7 +2,6 @@
 @using Microsoft.JSInterop
 @inject IReportService ReportSvc
 @inject UiOptions Ui
-@inject NavigationManager Nav
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
@@ -48,7 +47,6 @@
                     <thead>
                         <tr>
                             @foreach (var c in result.Columns) { <th>@c</th> }
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -56,17 +54,11 @@
                         {
                             <tr>
                                 @foreach (var cell in row.Cells) { <td>@(string.IsNullOrEmpty(cell) ? "—" : cell)</td> }
-                                <td>
-                                    @if (current.ObjectType == ReportObjectType.User)
-                                    {
-                                        <button class="linkbtn" @onclick="() => Modify(row.Dn)">Modify ▸</button>
-                                    }
-                                </td>
                             </tr>
                         }
                         @if (pageItems.Count == 0)
                         {
-                            <tr><td colspan="@(result.Columns.Count + 1)" class="muted">No objects match this report.</td></tr>
+                            <tr><td colspan="@result.Columns.Count" class="muted">No objects match this report.</td></tr>
                         }
                     </tbody>
                 </table>
@@ -126,7 +118,6 @@
         return src.Where(r => r.Cells.Any(c => c.Contains(t, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
-    private void Modify(string dn) => Nav.NavigateTo($"users/modify?dn={Uri.EscapeDataString(dn)}");
 
     private async Task ExportCsv()
     {
