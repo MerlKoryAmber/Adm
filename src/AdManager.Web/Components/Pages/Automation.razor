@@ -112,6 +112,32 @@
         </select>
         <div class="hint">The task runs on the objects returned by this report.</div>
 
+        @* Refine Result — доп-условия поверх отчёта *@
+        <label style="margin-top:10px;display:block">Refine result</label>
+        @foreach (var (cond, i) in editing.Refine.Select((c, i) => (c, i)))
+        {
+            <div style="display:flex;gap:8px;align-items:center;margin:4px 0">
+                <span class="muted" style="width:18px">@(i + 1).</span>
+                <select @bind="cond.Field" style="min-width:150px">
+                    <option value="">— field —</option>
+                    <option value="@RefineFields.OuName">OU Name</option>
+                    @foreach (var col in RefineColumns()) { <option value="@col">@col</option> }
+                </select>
+                <select @bind="cond.Operator">
+                    <option value="@RefineOperator.Is">Is</option>
+                    <option value="@RefineOperator.Contains">Contains</option>
+                    <option value="@RefineOperator.IsNot">Is not</option>
+                    <option value="@RefineOperator.NotContains">Not Contains</option>
+                </select>
+                <input type="text" @bind="cond.Value" placeholder="value" />
+                <button class="linkbtn" @onclick="() => editing.Refine.RemoveAt(i)">✕</button>
+            </div>
+        }
+        <div class="btnrow"><button @onclick="() => editing.Refine.Add(new RefineCondition())">+ Add condition</button></div>
+        @if (editing.Refine.Count > 0) { <div class="hint">All conditions must match (AND).</div> }
+
+        <div class="checkbox" style="margin-top:8px"><input type="checkbox" id="excl" @bind="editing.ExcludePreviouslyModified" /><label for="excl">Exclude objects modified by the previous execution of this automation</label></div>
+
         <hr />
         <div class="treegroup" style="padding-left:0">Execution time</div>
         <label>Run at</label>
@@ -193,6 +219,9 @@
             Id = a.Id, Name = a.Name, Description = a.Description, Enabled = a.Enabled,
             TaskType = a.TaskType, SourceReportKey = a.SourceReportKey,
             Parameters = new(a.Parameters),
+            Refine = a.Refine.Select(c => new RefineCondition { Field = c.Field, Operator = c.Operator, Value = c.Value }).ToList(),
+            ExcludePreviouslyModified = a.ExcludePreviouslyModified,
+            LastProcessedDns = new(a.LastProcessedDns),
             Schedule = new AutomationSchedule
             {
                 Kind = a.Schedule.Kind, EveryHours = a.Schedule.EveryHours, Hour = a.Schedule.Hour,
@@ -225,6 +254,9 @@
         }
         if (editing.Schedule.Kind == ScheduleKind.Once) editing.Schedule.RunAtMsk = onceAt;
 
+        // отбросить пустые Refine-условия (без поля)
+        editing.Refine = editing.Refine.Where(c => !string.IsNullOrEmpty(c.Field)).ToList();
+
         await Scheduler.RegisterAsync(editing);
         Show(isNew ? "Automation created." : "Automation updated.", true);
         editing = null;
@@ -250,4 +282,18 @@
 
     private void Show(string m, bool success) { ok = success; banner = m; }
     private static string OuIndent(int d) => string.Concat(Enumerable.Repeat(' ', d * 3)) + (d > 0 ? "└ " : "");
+
+    /// <summary>Колонки отчёта для Refine — по типу объекта выбранного отчёта.</summary>
+    private string[] RefineColumns()
+    {
+        var def = editing is null ? null : ReportSvc.Find(editing.SourceReportKey);
+        return def?.ObjectType switch
+        {
+            ReportObjectType.User    => new[] { "Display name", "Account", "UPN", "Email", "Status" },
+            ReportObjectType.Group   => new[] { "Name", "Account", "Members" },
+            ReportObjectType.Contact => new[] { "Name", "Email" },
+            ReportObjectType.Ou      => new[] { "Name", "Depth" },
+            _ => Array.Empty<string>(),
+        };
+    }
 }

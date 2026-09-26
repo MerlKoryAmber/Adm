@@ -123,19 +123,56 @@ public sealed class AutomationScheduler : BackgroundService, IAutomationSchedule
         if (string.IsNullOrEmpty(def.SourceReportKey))
             return "No source report configured";
         var report = await reports.RunAsync(def.SourceReportKey, ct);
-        var targets = report.Rows.Select(r => r.Dn).ToList();
-        if (targets.Count == 0) return "0 objects (report empty)";
 
-        // 2) задача к каждому объекту
+        // 2) Refine Result: доп-условия по колонкам отчёта / OU Name (AND)
+        var rows = report.Rows.Where(row => MatchesRefine(def.Refine, report.Columns, row)).ToList();
+
+        // 3) Exclude: убрать обработанные прошлым запуском
+        if (def.ExcludePreviouslyModified && def.LastProcessedDns.Count > 0)
+        {
+            var prev = new HashSet<string>(def.LastProcessedDns, StringComparer.OrdinalIgnoreCase);
+            rows = rows.Where(r => !prev.Contains(r.Dn)).ToList();
+        }
+
+        var targets = rows.Select(r => r.Dn).ToList();
+        if (targets.Count == 0) return "0 objects (after filters)";
+
+        // 4) задача к каждому объекту
         int ok = 0, fail = 0;
+        var processed = new List<string>();
         foreach (var dn in targets)
         {
             var r = await ApplyTaskAsync(def, mgmt, sp, actor, dn, ct);
-            if (r) ok++; else fail++;
+            if (r) { ok++; processed.Add(dn); } else fail++;
         }
+        // запомнить обработанных для следующего Exclude
+        if (def.ExcludePreviouslyModified) def.LastProcessedDns = processed;
+
         var summary = $"{ok} ok, {fail} failed of {targets.Count}";
         _log.LogInformation("automation '{Name}' ({Task}): {Summary}", def.Name, def.TaskType, summary);
         return summary;
+    }
+
+    /// <summary>Все условия Refine совпали (AND). Значение поля — колонка отчёта по имени
+    /// или спец "OU Name" из DN.</summary>
+    internal static bool MatchesRefine(List<RefineCondition> refine, IReadOnlyList<string> columns, ReportRow row)
+    {
+        if (refine.Count == 0) return true;
+        foreach (var cond in refine)
+        {
+            string? cell;
+            if (string.Equals(cond.Field, RefineFields.OuName, StringComparison.OrdinalIgnoreCase))
+                cell = RefineFields.OuNameOf(row.Dn);
+            else
+            {
+                var idx = -1;
+                for (int i = 0; i < columns.Count; i++)
+                    if (string.Equals(columns[i], cond.Field, StringComparison.OrdinalIgnoreCase)) { idx = i; break; }
+                cell = idx >= 0 && idx < row.Cells.Count ? row.Cells[idx] : "";
+            }
+            if (!cond.Matches(cell)) return false;
+        }
+        return true;
     }
 
     private async Task<bool> ApplyTaskAsync(AutomationDefinition def, AdManagementService mgmt, IServiceProvider sp, TechnicianContext actor, string dn, CancellationToken ct)

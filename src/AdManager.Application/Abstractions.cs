@@ -83,6 +83,15 @@ public sealed class AutomationDefinition
     /// <summary>Источник объектов — ключ отчёта из IReportService (Select objects → From Report).</summary>
     public string SourceReportKey { get; set; } = "";
 
+    /// <summary>Refine Result: доп-условия поверх строк отчёта (все должны совпасть, AND).</summary>
+    public List<RefineCondition> Refine { get; set; } = new();
+
+    /// <summary>Исключать объекты, обработанные прошлым запуском (чтобы не гонять одно и то же).</summary>
+    public bool ExcludePreviouslyModified { get; set; }
+
+    /// <summary>DN, обработанные прошлым запуском (для ExcludePreviouslyModified).</summary>
+    public List<string> LastProcessedDns { get; set; } = new();
+
     /// <summary>Когда запускать (человекочитаемо).</summary>
     public AutomationSchedule Schedule { get; set; } = new();
 

@@ -16,6 +16,49 @@ public interface IAutomationStore
     Task SaveAsync(AutomationData data, CancellationToken ct = default);
 }
 
+/// <summary>Оператор фильтра Refine Result (эталон ADManager Plus).</summary>
+public enum RefineOperator { Is, Contains, IsNot, NotContains }
+
+/// <summary>Условие уточнения результата отчёта (Refine Result). Field — имя колонки
+/// отчёта или спец-поле "OU Name". Применяется поверх строк отчёта в автоматизации.</summary>
+public sealed class RefineCondition
+{
+    public string Field { get; set; } = "";
+    public RefineOperator Operator { get; set; } = RefineOperator.Is;
+    public string Value { get; set; } = "";
+
+    public bool Matches(string? cell)
+    {
+        var c = cell ?? "";
+        var v = Value ?? "";
+        return Operator switch
+        {
+            RefineOperator.Is          => string.Equals(c, v, StringComparison.OrdinalIgnoreCase),
+            RefineOperator.IsNot       => !string.Equals(c, v, StringComparison.OrdinalIgnoreCase),
+            RefineOperator.Contains    => c.Contains(v, StringComparison.OrdinalIgnoreCase),
+            RefineOperator.NotContains => !c.Contains(v, StringComparison.OrdinalIgnoreCase),
+            _ => true,
+        };
+    }
+}
+
+/// <summary>Спец-поле Refine, вычисляемое из DN (не колонка отчёта).</summary>
+public static class RefineFields
+{
+    public const string OuName = "OU Name";
+
+    /// <summary>Имя непосредственной родительской OU из DN ("…,OU=Sales,DC=…" → "Sales").</summary>
+    public static string OuNameOf(string dn)
+    {
+        foreach (var part in dn.Split(','))
+        {
+            var p = part.Trim();
+            if (p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase)) return p.Substring(3);
+        }
+        return "";
+    }
+}
+
 /// <summary>Тип расписания (человекочитаемый, НЕ cron — эталон ADManager Plus).</summary>
 public enum ScheduleKind { Hourly, Daily, Weekly, Monthly, Once }
 
