@@ -87,6 +87,9 @@ h3 { margin: 0 0 8px; font-size: 15px; color: #eef2f7; }
 
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
 .panelhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+/* Шапка страницы: заголовок слева, основное действие справа */
+.pagehead { display: flex; align-items: center; gap: 12px; }
+.pagehead h1 { margin: 0; }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }

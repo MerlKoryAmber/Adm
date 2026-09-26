@@ -6,7 +6,14 @@
 @inject UiOptions Ui
 
 <PageTitle>Automation — admanager</PageTitle>
-<h1>Scheduled Automation</h1>
+<div class="pagehead">
+    <h1>Scheduled Automation</h1>
+    <span class="grow"></span>
+    @if (editing is null)
+    {
+        <button class="primary" @onclick="NewAutomation">+ Create New Automation</button>
+    }
+</div>
 <RequireAccess Permissions="new[] { Permission.ManageAutomation }">
 <p class="subtitle">Automatically execute AD tasks at a pre-specified time. Each run goes through RBAC + audit. No approval workflow.</p>
 
@@ -15,10 +22,11 @@
     <div class="banner @(ok ? "ok" : "err")">@banner</div>
 }
 
-@* ---------------- Список ---------------- *@
+@* ---------------- Список (скрыт, пока открыта форма) ---------------- *@
+@if (editing is null)
+{
 <div class="panel">
     <div class="panelhead"><h3>Automations</h3><span class="grow"></span>
-        <button class="primary" @onclick="NewAutomation">+ Create New Automation</button>
         <button @onclick="Reload">Refresh</button>
     </div>
     @if (data is null) { <p>Loading…</p> }
@@ -55,8 +63,9 @@
         </div>
     }
 </div>
+}
 
-@* ---------------- Форма Modify ---------------- *@
+@* ---------------- Форма Modify (вместо списка) ---------------- *@
 @if (editing is not null)
 {
     <div class="panel" style="margin-top:18px;max-width:820px">
