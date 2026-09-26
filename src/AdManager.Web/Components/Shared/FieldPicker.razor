@@ -26,6 +26,19 @@
                 }
             </div>
         }
+        @if (ExtraFields is { Count: > 0 })
+        {
+            <div>
+                <div class="treegroup" style="margin:2px 0">Custom Attributes</div>
+                @foreach (var (key, label) in ExtraFields)
+                {
+                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
+                        <input type="checkbox" checked="@Selected.Contains(key)" @onchange="e => Toggle(key, e)" />
+                        <span>@label</span>
+                    </label>
+                }
+            </div>
+        }
     </div>
 </div>
 
@@ -33,6 +46,8 @@
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public string? Hint { get; set; }
     [Parameter, EditorRequired] public HashSet<string> Selected { get; set; } = new();
+    /// <summary>Доп-поля (custom-атрибуты): (ldapKey, label). Показываются в категории Custom Attributes.</summary>
+    [Parameter] public List<(string Key, string Label)>? ExtraFields { get; set; }
 
     private void Toggle(string key, ChangeEventArgs e)
     {

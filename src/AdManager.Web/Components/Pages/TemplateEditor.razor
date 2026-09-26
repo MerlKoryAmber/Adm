@@ -1,5 +1,6 @@
 @page "/templates/edit"
 @inject IUserTemplateStore Store
+@inject ICustomAttributeStore CustomAttrs
 @inject NavigationManager Nav
 
 <PageTitle>Template editor — admanager</PageTitle>
@@ -47,6 +48,18 @@
                 }
             </div>
         }
+        <div class="traygroup">Custom Attributes</div>
+        <div class="chips">
+            @foreach (var a in customAttrs)
+            {
+                var isPlaced = Placed.Contains(a.LdapName);
+                <button class="chip @(isPlaced ? "placed" : null)" disabled="@isPlaced"
+                        title="@a.LdapName" @onclick="() => AddField(a.LdapName)">
+                    @a.Label @(isPlaced ? "✓" : "")
+                </button>
+            }
+            <button class="chip" style="border-style:dashed" @onclick='() => Nav.NavigateTo("custom-attributes")'>+ Add custom attribute</button>
+        </div>
     </div>
 
     <!-- Tabs + fields -->
@@ -137,11 +150,13 @@
     private int sel;
     private bool confirmTabDel;
     private string? banner; private bool ok;
+    private List<CustomAttribute> customAttrs = new();
 
     private HashSet<string> Placed => tpl.Tabs.SelectMany(t => t.Fields).Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
+        customAttrs = (await CustomAttrs.ListAsync()).ToList();
         if (Id is Guid id && await Store.GetAsync(id) is { } found)
         {
             tpl = found; isNew = false;

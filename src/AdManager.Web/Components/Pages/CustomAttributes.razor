@@ -1,0 +1,117 @@
+@page "/custom-attributes"
+@inject ICustomAttributeStore Store
+@inject IAdDirectory Dir
+
+<PageTitle>Custom Attributes — admanager</PageTitle>
+<h1>Additional Custom Attributes</h1>
+<RequireAccess Permissions="new[] { Permission.CreateUser, Permission.ModifyAttributes }">
+<p class="subtitle">Extra AD attributes to expose on user templates. The attribute must exist in the AD schema.</p>
+
+@if (banner is not null)
+{
+    <div class="banner @(ok ? "ok" : "err")">@banner</div>
+}
+
+<div class="panel" style="max-width:820px">
+    <h3>Custom attributes</h3>
+    @if (items is null) { <p>Loading…</p> }
+    else if (items.Count == 0) { <p class="muted">No custom attributes yet.</p> }
+    else
+    {
+        <table><thead><tr><th>LDAP name</th><th>Display name</th><th>Default</th><th>Help card</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var a in items)
+            {
+                <tr>
+                    <td><b>@a.LdapName</b></td>
+                    <td>@a.DisplayName</td>
+                    <td>@(string.IsNullOrEmpty(a.DefaultValue) ? "—" : a.DefaultValue)</td>
+                    <td class="muted">@a.HelpCard</td>
+                    <td>
+                        @if (confirmDelete == a.Id)
+                        {
+                            <button class="danger" @onclick="() => Delete(a.Id)">Confirm</button>
+                            <button @onclick="() => confirmDelete = null">Cancel</button>
+                        }
+                        else { <button class="danger" @onclick="() => confirmDelete = a.Id">Delete</button> }
+                    </td>
+                </tr>
+            }
+        </tbody></table>
+    }
+
+    <hr />
+    <h3>Add Additional Custom Attribute</h3>
+    <div class="grid2" style="max-width:620px">
+        <div>
+            <label>LDAP Name *</label>
+            <input type="text" @bind="newLdap" placeholder="extensionAttribute1" />
+            <div class="hint">The attribute's ldapDisplayName. Must exist in the AD schema.</div>
+        </div>
+        <div>
+            <label>Display Name</label>
+            <input type="text" @bind="newDisplay" placeholder="Cost center" />
+            <div class="hint">Shown as the field label (defaults to LDAP name).</div>
+        </div>
+    </div>
+    <div class="grid2" style="max-width:620px">
+        <div>
+            <label>Default Value</label>
+            <input type="text" @bind="newDefault" />
+        </div>
+        <div>
+            <label>Help Card</label>
+            <input type="text" @bind="newHelp" placeholder="hint shown under the field" />
+        </div>
+    </div>
+    <div class="btnrow"><button class="primary" @onclick="Add" disabled="@(string.IsNullOrWhiteSpace(newLdap) || adding)">@(adding ? "Checking schema…" : "Add")</button></div>
+</div>
+</RequireAccess>
+
+@code {
+    private List<CustomAttribute>? items;
+    private string? banner; private bool ok;
+    private Guid? confirmDelete;
+    private bool adding;
+
+    private string newLdap = "", newDisplay = "", newDefault = "", newHelp = "";
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => items = (await Store.ListAsync()).ToList();
+
+    private async Task Add()
+    {
+        var ldap = newLdap.Trim();
+        if (string.IsNullOrEmpty(ldap)) return;
+        adding = true; banner = null;
+        try
+        {
+            if (items!.Any(a => string.Equals(a.LdapName, ldap, StringComparison.OrdinalIgnoreCase)))
+            { ok = false; banner = $"'{ldap}' is already added."; return; }
+
+            if (!await Dir.AttributeExistsInSchemaAsync(ldap))
+            { ok = false; banner = $"Attribute '{ldap}' was not found in the AD schema."; return; }
+
+            await Store.SaveAsync(new CustomAttribute
+            {
+                LdapName = ldap,
+                DisplayName = newDisplay.Trim(),
+                DefaultValue = string.IsNullOrWhiteSpace(newDefault) ? null : newDefault.Trim(),
+                HelpCard = string.IsNullOrWhiteSpace(newHelp) ? null : newHelp.Trim(),
+            });
+            newLdap = newDisplay = newDefault = newHelp = "";
+            ok = true; banner = "Custom attribute added.";
+            await Load();
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+        finally { adding = false; }
+    }
+
+    private async Task Delete(Guid id)
+    {
+        await Store.DeleteAsync(id);
+        confirmDelete = null; ok = true; banner = "Deleted.";
+        await Load();
+    }
+}

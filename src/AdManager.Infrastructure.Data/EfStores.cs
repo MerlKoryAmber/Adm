@@ -75,3 +75,35 @@ public sealed class TemplateList
 {
     public List<UserTemplate> Items { get; set; } = new();
 }
+
+/// <summary>Обёртка-документ для каталога custom-атрибутов.</summary>
+public sealed class CustomAttrList
+{
+    public List<CustomAttribute> Items { get; set; } = new();
+}
+
+/// <summary>Каталог custom-атрибутов в БД (JSON-документ).</summary>
+public sealed class EfCustomAttributeStore : EfAppStateStore<CustomAttrList>, ICustomAttributeStore
+{
+    public EfCustomAttributeStore(IDbContextFactory<AdManagerDbContext> factory)
+        : base(factory, "customattrs") { }
+
+    public async Task<IReadOnlyList<CustomAttribute>> ListAsync(CancellationToken ct = default)
+        => (await LoadCoreAsync(ct)).Items;
+
+    public async Task SaveAsync(CustomAttribute attribute, CancellationToken ct = default)
+    {
+        var list = await LoadCoreAsync(ct);
+        list.Items.RemoveAll(a => a.Id == attribute.Id
+            || string.Equals(a.LdapName, attribute.LdapName, StringComparison.OrdinalIgnoreCase));
+        list.Items.Add(attribute);
+        await SaveCoreAsync(list, ct);
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var list = await LoadCoreAsync(ct);
+        list.Items.RemoveAll(a => a.Id == id);
+        await SaveCoreAsync(list, ct);
+    }
+}

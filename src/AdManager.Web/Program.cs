@@ -182,6 +182,14 @@ if (useEfStore)
 else
     builder.Services.AddSingleton<IUserTemplateStore>(new FileUserTemplateStore(tplPath));
 
+// Каталог custom-атрибутов (глобальный).
+var caPath = builder.Configuration["CustomAttrs:FilePath"]
+             ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "custom-attributes.json");
+if (useEfStore)
+    builder.Services.AddSingleton<ICustomAttributeStore, EfCustomAttributeStore>();
+else
+    builder.Services.AddSingleton<ICustomAttributeStore>(new FileCustomAttributeStore(caPath));
+
 builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomationScheduler>());

@@ -54,6 +54,9 @@ public interface IAdDirectory
 
     /// <summary>Поиск объектов по подстроке (cn/sAMAccountName/displayName/mail) в поддереве.</summary>
     Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default);
+
+    /// <summary>Есть ли атрибут с таким LDAP-именем в схеме AD (для custom-атрибутов).</summary>
+    Task<bool> AttributeExistsInSchemaAsync(string ldapName, CancellationToken ct = default);
 }
 
 /// <summary>

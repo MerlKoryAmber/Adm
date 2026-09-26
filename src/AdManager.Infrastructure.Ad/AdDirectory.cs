@@ -331,6 +331,32 @@ public sealed class AdDirectory : IAdDirectory
         catch { return false; }
     }
 
+    public Task<bool> AttributeExistsInSchemaAsync(string ldapName, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            if (string.IsNullOrWhiteSpace(ldapName)) return false;
+            try
+            {
+                // schemaNamingContext из RootDSE, затем поиск attributeSchema по lDAPDisplayName
+                using var root = Bind("RootDSE");
+                var schemaNc = root.Properties["schemaNamingContext"].Count > 0
+                    ? root.Properties["schemaNamingContext"][0]?.ToString()
+                    : null;
+                if (string.IsNullOrEmpty(schemaNc)) return false;
+
+                using var schema = Bind(schemaNc);
+                using var s = new DirectorySearcher(schema)
+                {
+                    Filter = $"(&(objectClass=attributeSchema)(lDAPDisplayName={EscapeFilter(ldapName)}))",
+                    SearchScope = SearchScope.OneLevel,
+                    SizeLimit = 1,
+                };
+                s.PropertiesToLoad.Add("lDAPDisplayName");
+                return s.FindOne() != null;
+            }
+            catch { return false; }
+        }, ct);
+
     /// <summary>Ключ иерархической сортировки: компоненты DN снизу вверх, склеенные с
     /// разделителем. Родитель — префикс ключа ребёнка, поэтому дети идут сразу за ним,
     /// а сиблинги — по алфавиту (сравнение OrdinalIgnoreCase у вызывающего).</summary>

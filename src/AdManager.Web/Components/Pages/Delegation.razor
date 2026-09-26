@@ -4,6 +4,7 @@
 @inject IUserTemplateStore Templates
 @inject UiOptions Ui
 @inject IAuditLog Audit
+@inject ICustomAttributeStore CustomAttrs
 
 <PageTitle>Delegation — admanager</PageTitle>
 <h1>Delegation</h1>
@@ -86,11 +87,11 @@ else
 
                 @if (rolePerms.Contains(Permission.CreateUser))
                 {
-                    <FieldPicker Title="Create user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="createFields" />
+                    <FieldPicker Title="Create user — allowed fields" Hint="Leave all unchecked to allow every field." Selected="createFields" ExtraFields="customFields" />
                 }
                 @if (rolePerms.Contains(Permission.ModifyAttributes))
                 {
-                    <FieldPicker Title="Modify users — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" />
+                    <FieldPicker Title="Modify users — allowed fields" Hint="Leave all unchecked to allow every field." Selected="modifyFields" ExtraFields="customFields" />
                 }
             }
 
@@ -473,6 +474,7 @@ else
 
     private List<UserTemplate> createTemplates = new();
     private List<UserTemplate> modifyTemplates = new();
+    private List<(string Key, string Label)> customFields = new();
 
     [SupplyParameterFromQuery(Name = "s")] private string? S { get; set; }
     private string section = "roles";
@@ -486,6 +488,7 @@ else
         var tpls = await Templates.ListAsync();
         createTemplates = tpls.Where(t => t.Kind == "Create").ToList();
         modifyTemplates = tpls.Where(t => t.Kind == "Modify").ToList();
+        customFields = (await CustomAttrs.ListAsync()).Select(a => (a.LdapName, a.Label)).ToList();
         // техники для фильтра Audit Report (уникальные субъекты назначений)
         repActors = cfg.Assignments
             .Select(a => (Sid: a.SubjectSid, Name: a.SubjectName ?? a.SubjectSid))
