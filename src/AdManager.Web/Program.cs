@@ -33,6 +33,14 @@ builder.Services.AddSingleton<IOperationalCredentialProvider>(sp =>
         sp.GetService<ISettingsStore>()));
 builder.Services.AddScoped<IAdService, AdService>();
 builder.Services.AddScoped<IAdDirectory, AdDirectory>();
+// Кэш дерева OU (singleton) + фоновое обновление раз в час. Держит полное дерево,
+// фильтрует системные контейнеры (Domain Controllers и т.п.).
+builder.Services.AddSingleton<IOuTreeProvider>(sp =>
+    new OuTreeCache(
+        sp.GetRequiredService<IServiceScopeFactory>(),
+        sp.GetRequiredService<UiOptions>().BaseDn,
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger<OuTreeCache>()));
+builder.Services.AddHostedService<OuTreeRefresher>();
 // Провайдер аудита: ADMGR_AUDIT=Ef (SQL, по умолчанию) | File (JSONL, без БД).
 var auditProvider = Environment.GetEnvironmentVariable("ADMGR_AUDIT")
                     ?? builder.Configuration["Audit:Provider"] ?? "Ef";

@@ -55,3 +55,17 @@ public interface IAdDirectory
     /// <summary>Поиск объектов по подстроке (cn/sAMAccountName/displayName/mail) в поддереве.</summary>
     Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Кэш полного дерева OU (ADR: чтение AD дорого при тысячах OU). Держит дерево в
+/// памяти, обновляет по расписанию (BackgroundService, раз в час) и по требованию.
+/// Возвращает уже отфильтрованное дерево — без системных контейнеров (Domain
+/// Controllers и well-known), куда делегировать scope нельзя.
+/// </summary>
+public interface IOuTreeProvider
+{
+    /// <summary>Полное дерево OU (иерархический порядок, Depth для отступа), из кэша.</summary>
+    Task<IReadOnlyList<AdOuNode>> GetTreeAsync(CancellationToken ct = default);
+    /// <summary>Принудительно перечитать дерево из AD (после правок OU или по кнопке Refresh).</summary>
+    Task RefreshAsync(CancellationToken ct = default);
+}

@@ -57,7 +57,7 @@
 
     // ous — плоский список только для селекта «Move under» (в <select> ленивое дерево не вставить).
     private List<AdOuNode>? ous;
-    private AdOuSummary? sel;
+    private AdOuNode? sel;
     private string renameTo = "", moveTo = "";
     private string? banner; private bool ok; private bool confirmDelete;
     private int treeKey;   // смена -> пересоздать OuTree (Refresh/после операции)
@@ -78,7 +78,7 @@
         return CurrentUser.From(p);
     }
 
-    private void SelectOu(AdOuSummary o) { sel = o; banner = null; confirmDelete = false; renameTo = ""; moveTo = Ui.BaseDn; }
+    private void SelectOu(AdOuNode o) { sel = o; banner = null; confirmDelete = false; renameTo = ""; moveTo = Ui.BaseDn; }
 
     private async Task Rename() { Show(await Mgmt.RenameAsync(await Actor(), sel!.Dn, $"OU={renameTo}")); await Reload(); }
     private async Task Move() { Show(await Mgmt.MoveAsync(await Actor(), sel!.Dn, moveTo)); await Reload(); }

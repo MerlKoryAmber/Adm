@@ -117,7 +117,7 @@ else
                 <button type="button" @onclick="() => { scopeOus.Clear(); }">Clear</button>
             </div>
             <OuTree Selectable="true" Selected="scopeOus" OnSelectionChanged="StateHasChanged" />
-            <div class="checkbox" style="margin-top:8px"><input type="checkbox" id="sub" @bind="scopeSubtree" /><label for="sub">Include subtree (apply to child OUs as well)</label></div>
+            <div class="hint" style="margin-top:6px">Select a parent OU to include all OUs under it; uncheck any child to exclude it.</div>
             <div class="btnrow"><button class="primary" @onclick="CreateScope" disabled="@(string.IsNullOrWhiteSpace(scopeName) || scopeOus.Count == 0)">Create scope</button></div>
         </div>
     }
@@ -293,7 +293,6 @@ else
 
     private string scopeName = "";
     private readonly HashSet<string> scopeOus = new();
-    private bool scopeSubtree = true;
 
     private string asgType = "Technician", asgSid = "", asgRole = "", asgScope = "";
     private string asgCreateTpl = "", asgModifyTpl = "";
@@ -344,8 +343,10 @@ else
 
     private async Task CreateScope()
     {
-        cfg!.Scopes.Add(new DelegationScope { Name = scopeName.Trim(), OuDns = scopeOus.ToList(), IncludeSubtree = scopeSubtree });
-        await Save("Scope created."); scopeName = ""; scopeOus.Clear(); scopeSubtree = true;
+        // Каскад дерева уже перечислил всех выбранных потомков явно, поэтому
+        // IncludeSubtree=false (список OuDns полон). Семантика "с детьми" — через выбор.
+        cfg!.Scopes.Add(new DelegationScope { Name = scopeName.Trim(), OuDns = scopeOus.ToList(), IncludeSubtree = false });
+        await Save("Scope created."); scopeName = ""; scopeOus.Clear();
     }
     private async Task DeleteScope(Guid id) { cfg!.Scopes.RemoveAll(s => s.Id == id); await Save("Scope deleted."); }
 

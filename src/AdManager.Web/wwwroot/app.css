@@ -189,6 +189,8 @@ table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); 
 .outree-caret { display: inline-block; width: 14px; text-align: center; font-size: 9px; color: var(--muted); cursor: pointer; transition: transform .12s; user-select: none; }
 .outree-caret.open { transform: rotate(90deg); }
 .outree-caret.empty { cursor: default; visibility: hidden; }
+/* Частично выбранный узел (есть отмеченные потомки, сам не отмечен) */
+.outree input[type=checkbox].indeterminate { accent-color: var(--muted); opacity: .7; outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Растяжение до низа экрана: фиксированная высота от viewport (не max-height,
    иначе контейнер сжимается по содержимому). При переполнении — внутренний скролл. */
 .outree-full { height: calc(100vh - 440px); min-height: 220px; }

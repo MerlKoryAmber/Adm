@@ -1,95 +1,135 @@
-@inject IAdDirectory Dir
-@inject UiOptions Ui
+@inject IOuTreeProvider OuTreeProvider
 
-@* Ленивое OU-дерево со сворачиванием (как в AD-консоли). Дети узла грузятся при
-   первом раскрытии (ListOusAsync, OneLevel) — держит тысячи OU. Два режима:
-   Selectable=true — чекбоксы (выбор scope); иначе клик по строке = навигация. *@
+@* OU-дерево со сворачиванием (как в AD-консоли). Полное дерево берётся из кэша
+   (IOuTreeProvider, обновляется по расписанию). Режимы:
+   Selectable=true — каскадные чекбоксы (отметил родителя → все потомки; снял ребёнка →
+   исключился; родитель показывает indeterminate при частичном выборе).
+   Иначе — клик по строке = навигация (SelectedDn / OnSelect). *@
 
 <div class="outree @(FullHeight ? "outree-full" : null)">
-    @if (roots is null)
+    @if (nodes is null)
     {
         <p class="muted" style="padding:8px">Loading…</p>
     }
-    else if (roots.Count == 0)
+    else if (nodes.Count == 0)
     {
         <p class="muted" style="padding:8px">No OUs.</p>
     }
     else
     {
-        @foreach (var node in roots)
+        @foreach (var n in Roots())
         {
-            @RenderNode(node, 0)
+            @RenderNode(n)
         }
     }
 </div>
 
 @code {
-    /// <summary>Корневой DN. По умолчанию — база домена из UiOptions.</summary>
-    [Parameter] public string? RootDn { get; set; }
-    /// <summary>Режим выбора: показывать чекбоксы и вести Selected.</summary>
     [Parameter] public bool Selectable { get; set; }
-    /// <summary>Набор выбранных DN (для Selectable). Меняется на месте.</summary>
     [Parameter] public HashSet<string>? Selected { get; set; }
-    /// <summary>DN выделенной строки (для режима навигации).</summary>
     [Parameter] public string? SelectedDn { get; set; }
-    /// <summary>Клик по строке (режим навигации).</summary>
-    [Parameter] public EventCallback<AdOuSummary> OnSelect { get; set; }
-    /// <summary>Изменился выбор (Selectable) — родитель может обновить счётчик.</summary>
+    [Parameter] public EventCallback<AdOuNode> OnSelect { get; set; }
     [Parameter] public EventCallback OnSelectionChanged { get; set; }
-    /// <summary>Растягивать до низа экрана.</summary>
     [Parameter] public bool FullHeight { get; set; } = true;
 
-    private sealed class Node
+    private sealed class TreeNode
     {
-        public required AdOuSummary Ou { get; init; }
+        public required AdOuNode Ou { get; init; }
+        public TreeNode? Parent { get; set; }
+        public List<TreeNode> Children { get; } = new();
         public bool Expanded { get; set; }
-        public bool Loading { get; set; }
-        public List<Node>? Children { get; set; }
     }
 
-    private List<Node>? roots;
+    private IReadOnlyList<AdOuNode>? nodes;
+    private List<TreeNode> allNodes = new();
+    private Dictionary<string, TreeNode> byDn = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
-        var baseDn = RootDn ?? Ui.BaseDn;
-        var top = await Dir.ListOusAsync(baseDn);
-        roots = top.Select(o => new Node { Ou = o }).ToList();
+        nodes = await OuTreeProvider.GetTreeAsync();
+        BuildTree();
     }
 
-    private async Task Toggle(Node n)
+    /// <summary>Собрать дерево из плоского иерархически-упорядоченного списка по DN родителя.</summary>
+    private void BuildTree()
     {
-        if (n.Expanded) { n.Expanded = false; return; }
-        n.Expanded = true;
-        if (n.Children is null)
+        allNodes = new();
+        byDn = new(StringComparer.OrdinalIgnoreCase);
+        if (nodes is null) return;
+        foreach (var ou in nodes)
         {
-            n.Loading = true;
-            var kids = await Dir.ListOusAsync(n.Ou.Dn);
-            n.Children = kids.Select(o => new Node { Ou = o }).ToList();
-            n.Loading = false;
+            var tn = new TreeNode { Ou = ou };
+            allNodes.Add(tn);
+            byDn[ou.Dn] = tn;
+        }
+        foreach (var tn in allNodes)
+        {
+            var parentDn = ParentDn(tn.Ou.Dn);
+            if (parentDn != null && byDn.TryGetValue(parentDn, out var p))
+            {
+                tn.Parent = p;
+                p.Children.Add(tn);
+            }
         }
     }
 
-    private async Task RowClick(Node n)
+    private IEnumerable<TreeNode> Roots() => allNodes.Where(n => n.Parent is null);
+
+    private static string? ParentDn(string dn)
     {
-        if (Selectable) { ToggleSel(n.Ou.Dn); }
+        var i = dn.IndexOf(',');
+        return i >= 0 ? dn[(i + 1)..] : null;
+    }
+
+    private async Task Toggle(TreeNode n) { n.Expanded = !n.Expanded; await Task.CompletedTask; }
+
+    private async Task RowClick(TreeNode n)
+    {
+        if (Selectable) { await SetChecked(n, !IsChecked(n)); }
         else { await OnSelect.InvokeAsync(n.Ou); }
     }
 
-    private async void ToggleSel(string dn)
+    private bool IsChecked(TreeNode n) => Selected != null && Selected.Contains(n.Ou.Dn);
+
+    /// <summary>Частично выбран: среди узла+потомков есть и выбранные, и невыбранные.
+    /// Показывает "не всё поддерево в scope" даже когда сам узел отмечен.</summary>
+    private bool IsIndeterminate(TreeNode n)
+    {
+        var all = DescendantsAndSelf(n).ToList();
+        var checkedCount = all.Count(IsChecked);
+        return checkedCount > 0 && checkedCount < all.Count;
+    }
+
+    private IEnumerable<TreeNode> DescendantsAndSelf(TreeNode n)
+    {
+        yield return n;
+        foreach (var c in n.Children)
+            foreach (var d in DescendantsAndSelf(c))
+                yield return d;
+    }
+
+    /// <summary>Каскад: отметить/снять узел вместе со всеми потомками.</summary>
+    private async Task SetChecked(TreeNode n, bool on)
     {
         if (Selected is null) return;
-        if (!Selected.Add(dn)) Selected.Remove(dn);
+        foreach (var d in DescendantsAndSelf(n))
+        {
+            if (on) Selected.Add(d.Ou.Dn);
+            else Selected.Remove(d.Ou.Dn);
+        }
         await OnSelectionChanged.InvokeAsync();
         StateHasChanged();
     }
 
-    private RenderFragment RenderNode(Node n, int depth) => __builder =>
+    private RenderFragment RenderNode(TreeNode n) => __builder =>
     {
-        var isSel = Selectable && Selected != null && Selected.Contains(n.Ou.Dn);
+        var depth = n.Ou.Depth;
+        var isSel = Selectable && IsChecked(n);
         var isCur = !Selectable && SelectedDn == n.Ou.Dn;
+        var indeterminate = Selectable && IsIndeterminate(n);
         <div class="outree-row @(isSel ? "checked" : null) @(isCur ? "selected" : null)"
              style="padding-left:@(6 + depth * 18)px">
-            @if (n.Ou.HasChildren)
+            @if (n.Children.Count > 0)
             {
                 <span class="outree-caret @(n.Expanded ? "open" : null)" @onclick="() => Toggle(n)" @onclick:stopPropagation="true">▶</span>
             }
@@ -99,23 +139,19 @@
             }
             @if (Selectable)
             {
-                <input type="checkbox" checked="@isSel" @onchange="() => ToggleSel(n.Ou.Dn)" @onclick:stopPropagation="true" />
+                <input type="checkbox" checked="@isSel"
+                       @onchange="e => SetChecked(n, (bool)(e.Value ?? false))"
+                       @onclick:stopPropagation="true"
+                       class="@(indeterminate ? "indeterminate" : null)" />
             }
             <span class="ouicon" @onclick="() => RowClick(n)">🗀</span>
             <span class="outree-name" @onclick="() => RowClick(n)">@n.Ou.Name</span>
         </div>
         @if (n.Expanded)
         {
-            @if (n.Loading)
+            @foreach (var c in n.Children)
             {
-                <div class="outree-row muted" style="padding-left:@(6 + (depth + 1) * 18)px">Loading…</div>
-            }
-            else if (n.Children != null)
-            {
-                @foreach (var c in n.Children)
-                {
-                    @RenderNode(c, depth + 1)
-                }
+                @RenderNode(c)
             }
         }
     };
