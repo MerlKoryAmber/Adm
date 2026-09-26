@@ -88,7 +88,10 @@ public sealed class AdDirectory : IAdDirectory
             var list = new List<AdOuSummary>();
             using var results = s.FindAll();
             foreach (SearchResult r in results)
-                list.Add(new AdOuSummary(Str(r, "distinguishedName"), Str(r, "name")));
+            {
+                var dn = Str(r, "distinguishedName");
+                list.Add(new AdOuSummary(dn, Str(r, "name"), HasChildOu(dn)));
+            }
             return list.OrderBy(o => o.Name).ToList();
         }, ct);
 
@@ -259,7 +262,10 @@ public sealed class AdDirectory : IAdDirectory
                 var dn = Str(r, "distinguishedName");
                 list.Add(new AdOuNode(dn, Str(r, "name"), Math.Max(0, OuCount(dn) - baseDepth)));
             }
-            return list.OrderBy(o => o.Dn.Length).ThenBy(o => o.Dn).ToList();
+            // Иерархический порядок: сортируем по DN, прочитанному снизу вверх
+            // (родитель → его дети сразу за ним, сиблинги по алфавиту). Так дерево
+            // разворачивается корректно вне зависимости от длины имён.
+            return list.OrderBy(o => HierKey(o.Dn), StringComparer.OrdinalIgnoreCase).ToList();
         }, ct);
 
     public Task<IReadOnlyList<AdSearchResult>> SearchAsync(string baseDn, string term, CancellationToken ct = default)
@@ -306,6 +312,34 @@ public sealed class AdDirectory : IAdDirectory
 
     private static int OuCount(string dn)
         => dn.Split(',').Count(p => p.Trim().StartsWith("OU=", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Есть ли под этим OU хотя бы один дочерний OU (для стрелки раскрытия в дереве).</summary>
+    private bool HasChildOu(string dn)
+    {
+        try
+        {
+            using var de = Bind(dn);
+            using var s = new DirectorySearcher(de)
+            {
+                Filter = "(objectClass=organizationalUnit)",
+                SearchScope = SearchScope.OneLevel,
+                SizeLimit = 1,
+            };
+            s.PropertiesToLoad.Add("distinguishedName");
+            return s.FindOne() != null;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Ключ иерархической сортировки: компоненты DN снизу вверх, склеенные с
+    /// разделителем. Родитель — префикс ключа ребёнка, поэтому дети идут сразу за ним,
+    /// а сиблинги — по алфавиту (сравнение OrdinalIgnoreCase у вызывающего).</summary>
+    private static string HierKey(string dn)
+    {
+        var parts = dn.Split(',').Select(p => p.Trim()).ToArray();
+        Array.Reverse(parts);
+        return string.Join("/", parts);
+    }
 
     private static string Str(SearchResult r, string p)
         => r.Properties.Contains(p) && r.Properties[p].Count > 0 ? r.Properties[p][0]!.ToString()! : "";

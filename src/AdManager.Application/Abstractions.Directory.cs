@@ -13,7 +13,7 @@ public sealed record AdUserSummary(
 
 public sealed record AdGroupSummary(string Dn, string SamAccountName, string Name);
 
-public sealed record AdOuSummary(string Dn, string Name);
+public sealed record AdOuSummary(string Dn, string Name, bool HasChildren = false);
 
 /// <summary>OU для выпадающего списка (Depth — уровень вложенности от базы, для отступа).</summary>
 public sealed record AdOuNode(string Dn, string Name, int Depth);

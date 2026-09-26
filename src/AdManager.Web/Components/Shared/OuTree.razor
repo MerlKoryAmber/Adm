@@ -1,0 +1,122 @@
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+
+@* Ленивое OU-дерево со сворачиванием (как в AD-консоли). Дети узла грузятся при
+   первом раскрытии (ListOusAsync, OneLevel) — держит тысячи OU. Два режима:
+   Selectable=true — чекбоксы (выбор scope); иначе клик по строке = навигация. *@
+
+<div class="outree @(FullHeight ? "outree-full" : null)">
+    @if (roots is null)
+    {
+        <p class="muted" style="padding:8px">Loading…</p>
+    }
+    else if (roots.Count == 0)
+    {
+        <p class="muted" style="padding:8px">No OUs.</p>
+    }
+    else
+    {
+        @foreach (var node in roots)
+        {
+            @RenderNode(node, 0)
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Корневой DN. По умолчанию — база домена из UiOptions.</summary>
+    [Parameter] public string? RootDn { get; set; }
+    /// <summary>Режим выбора: показывать чекбоксы и вести Selected.</summary>
+    [Parameter] public bool Selectable { get; set; }
+    /// <summary>Набор выбранных DN (для Selectable). Меняется на месте.</summary>
+    [Parameter] public HashSet<string>? Selected { get; set; }
+    /// <summary>DN выделенной строки (для режима навигации).</summary>
+    [Parameter] public string? SelectedDn { get; set; }
+    /// <summary>Клик по строке (режим навигации).</summary>
+    [Parameter] public EventCallback<AdOuSummary> OnSelect { get; set; }
+    /// <summary>Изменился выбор (Selectable) — родитель может обновить счётчик.</summary>
+    [Parameter] public EventCallback OnSelectionChanged { get; set; }
+    /// <summary>Растягивать до низа экрана.</summary>
+    [Parameter] public bool FullHeight { get; set; } = true;
+
+    private sealed class Node
+    {
+        public required AdOuSummary Ou { get; init; }
+        public bool Expanded { get; set; }
+        public bool Loading { get; set; }
+        public List<Node>? Children { get; set; }
+    }
+
+    private List<Node>? roots;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var baseDn = RootDn ?? Ui.BaseDn;
+        var top = await Dir.ListOusAsync(baseDn);
+        roots = top.Select(o => new Node { Ou = o }).ToList();
+    }
+
+    private async Task Toggle(Node n)
+    {
+        if (n.Expanded) { n.Expanded = false; return; }
+        n.Expanded = true;
+        if (n.Children is null)
+        {
+            n.Loading = true;
+            var kids = await Dir.ListOusAsync(n.Ou.Dn);
+            n.Children = kids.Select(o => new Node { Ou = o }).ToList();
+            n.Loading = false;
+        }
+    }
+
+    private async Task RowClick(Node n)
+    {
+        if (Selectable) { ToggleSel(n.Ou.Dn); }
+        else { await OnSelect.InvokeAsync(n.Ou); }
+    }
+
+    private async void ToggleSel(string dn)
+    {
+        if (Selected is null) return;
+        if (!Selected.Add(dn)) Selected.Remove(dn);
+        await OnSelectionChanged.InvokeAsync();
+        StateHasChanged();
+    }
+
+    private RenderFragment RenderNode(Node n, int depth) => __builder =>
+    {
+        var isSel = Selectable && Selected != null && Selected.Contains(n.Ou.Dn);
+        var isCur = !Selectable && SelectedDn == n.Ou.Dn;
+        <div class="outree-row @(isSel ? "checked" : null) @(isCur ? "selected" : null)"
+             style="padding-left:@(6 + depth * 18)px">
+            @if (n.Ou.HasChildren)
+            {
+                <span class="outree-caret @(n.Expanded ? "open" : null)" @onclick="() => Toggle(n)" @onclick:stopPropagation="true">▶</span>
+            }
+            else
+            {
+                <span class="outree-caret empty"></span>
+            }
+            @if (Selectable)
+            {
+                <input type="checkbox" checked="@isSel" @onchange="() => ToggleSel(n.Ou.Dn)" @onclick:stopPropagation="true" />
+            }
+            <span class="ouicon" @onclick="() => RowClick(n)">🗀</span>
+            <span class="outree-name" @onclick="() => RowClick(n)">@n.Ou.Name</span>
+        </div>
+        @if (n.Expanded)
+        {
+            @if (n.Loading)
+            {
+                <div class="outree-row muted" style="padding-left:@(6 + (depth + 1) * 18)px">Loading…</div>
+            }
+            else if (n.Children != null)
+            {
+                @foreach (var c in n.Children)
+                {
+                    @RenderNode(c, depth + 1)
+                }
+            }
+        }
+    };
+}

@@ -175,3 +175,20 @@ table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); 
 .login-card input[type=text], .login-card input[type=password] { width: 100%; box-sizing: border-box; }
 .linkbtn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 0 0 10px; }
 .linkbtn:hover { color: var(--accent); text-decoration: underline; }
+
+/* OU tree (Delegation scopes + OU list) */
+/* Растягивается до низа экрана (минимум 200px), не фиксированная высота. */
+.outree { max-height: calc(100vh - 320px); min-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 4px; background: var(--bg); }
+.outree-row { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; padding: 5px 8px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.03); }
+.outree-row:hover { background: var(--surface-hover); }
+.outree-row.checked { background: var(--accent-light); }
+.oubranch { color: var(--muted); opacity: .6; }
+.ouicon { opacity: .85; cursor: pointer; }
+.outree-name { cursor: pointer; }
+/* Caret раскрытия узла (как в AD-консоли) */
+.outree-caret { display: inline-block; width: 14px; text-align: center; font-size: 9px; color: var(--muted); cursor: pointer; transition: transform .12s; user-select: none; }
+.outree-caret.open { transform: rotate(90deg); }
+.outree-caret.empty { cursor: default; visibility: hidden; }
+/* Растяжение до низа экрана: фиксированная высота от viewport (не max-height,
+   иначе контейнер сжимается по содержимому). При переполнении — внутренний скролл. */
+.outree-full { height: calc(100vh - 440px); min-height: 220px; }

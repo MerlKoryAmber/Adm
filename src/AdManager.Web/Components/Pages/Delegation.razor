@@ -110,17 +110,14 @@ else
             <hr />
             <h3>New scope</h3>
             <label>Name</label><input type="text" @bind="scopeName" placeholder="Sales OU" />
-            <label>OUs</label>
-            <div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:5px;padding:6px;margin-top:4px">
-                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-                {
-                    <label style="font-weight:400;display:flex;gap:6px;align-items:center;margin:2px 0">
-                        <input type="checkbox" checked="@scopeOus.Contains(o.Dn)" @onchange="e => ToggleOu(o.Dn, e)" />
-                        <span>@IndentStr(o.Depth)@o.Name</span>
-                    </label>
-                }
+            <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                <label style="margin:0">OUs</label>
+                <span class="hint" style="margin:0">@scopeOus.Count selected</span>
+                <span class="grow"></span>
+                <button type="button" @onclick="() => { scopeOus.Clear(); }">Clear</button>
             </div>
-            <div class="checkbox"><input type="checkbox" id="sub" @bind="scopeSubtree" /><label for="sub">Include subtree</label></div>
+            <OuTree Selectable="true" Selected="scopeOus" OnSelectionChanged="StateHasChanged" />
+            <div class="checkbox" style="margin-top:8px"><input type="checkbox" id="sub" @bind="scopeSubtree" /><label for="sub">Include subtree (apply to child OUs as well)</label></div>
             <div class="btnrow"><button class="primary" @onclick="CreateScope" disabled="@(string.IsNullOrWhiteSpace(scopeName) || scopeOus.Count == 0)">Create scope</button></div>
         </div>
     }
@@ -221,7 +218,6 @@ else
 
 @code {
     private RbacConfig? cfg;
-    private List<AdOuNode>? ous;
     private string? banner; private bool ok;
 
     private static readonly string[] SuperNames = { "merl", "Domain Admins" };
@@ -313,7 +309,6 @@ else
     protected override async Task OnInitializedAsync()
     {
         cfg = await Store.LoadAsync();
-        try { ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); } catch { ous = new(); }
         var tpls = await Templates.ListAsync();
         createTemplates = tpls.Where(t => t.Kind == "Create").ToList();
         modifyTemplates = tpls.Where(t => t.Kind == "Modify").ToList();
@@ -331,7 +326,6 @@ else
     }
 
     private void TogglePerm(Permission p, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) rolePerms.Add(p); else rolePerms.Remove(p); }
-    private void ToggleOu(string dn, ChangeEventArgs e) { if ((bool)(e.Value ?? false)) scopeOus.Add(dn); else scopeOus.Remove(dn); }
 
     private async Task CreateRole()
     {
@@ -400,5 +394,4 @@ else
         cfg = await Store.LoadAsync();
     }
 
-    private static string IndentStr(int d) => new string(' ', d * 2);
 }
