@@ -1,4 +1,5 @@
 using System.Net;
+using AdManager.Application;
 using AdManager.Domain;
 using AdManager.Domain.Enums;
 
@@ -66,13 +67,29 @@ public sealed record AuditQuery(
     int Take = 200,
     AuditKind? Kind = null);
 
-public sealed record AutomationDefinition(
-    Guid Id,
-    string Name,
-    string CronMsk,
-    bool Enabled,
-    string TaskType,
-    IReadOnlyDictionary<string, string> Parameters);
+/// <summary>Определение автоматизации (эталон ADManager Plus): задача над объектами
+/// из отчёта, по человекочитаемому расписанию. Cron не используется.</summary>
+public sealed class AutomationDefinition
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Задача (AutomationTaskTypes) + её параметры (напр. groupDn, targetOu).</summary>
+    public string TaskType { get; set; } = "";
+    public Dictionary<string, string> Parameters { get; set; } = new();
+
+    /// <summary>Источник объектов — ключ отчёта из IReportService (Select objects → From Report).</summary>
+    public string SourceReportKey { get; set; } = "";
+
+    /// <summary>Когда запускать (человекочитаемо).</summary>
+    public AutomationSchedule Schedule { get; set; } = new();
+
+    public DateTime? LastRunMsk { get; set; }
+    public string? LastRunResult { get; set; }
+    public DateTime ModifiedUtc { get; set; } = DateTime.UtcNow;
+}
 
 /// <summary>Mode: "gMSA" (процесс) или "StoredCredential" (хранимая УЗ).</summary>
 public sealed record OperationalIdentity(string Mode, NetworkCredential? Credential);

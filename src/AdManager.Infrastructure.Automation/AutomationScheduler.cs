@@ -3,14 +3,14 @@ using AdManager.Application.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NCrontab;
 
 namespace AdManager.Infrastructure.Automation;
 
 /// <summary>
-/// Планировщик автоматизаций: BackgroundService тикает раз в минуту, запускает
-/// due-задачи по cron (МСК). Каждая операция идёт через AdManagementService → RBAC → аудит
-/// (актор = automation, супер-доступ). Апрув-workflow нет.
+/// Планировщик автоматизаций (эталон ADManager Plus, без cron): BackgroundService тикает
+/// раз в минуту, запускает due-задачи по человекочитаемому расписанию (МСК). Объекты берёт
+/// из отчёта (IReportService), применяет задачу к каждому. Операции идут через
+/// AdManagementService → RBAC → аудит (актор = Automation: &lt;имя&gt;).
 /// </summary>
 public sealed class AutomationScheduler : BackgroundService, IAutomationScheduler
 {
@@ -21,16 +21,14 @@ public sealed class AutomationScheduler : BackgroundService, IAutomationSchedule
 
     public AutomationScheduler(IAutomationStore store, IServiceProvider sp, RbacOptions rbac, ILogger<AutomationScheduler> log)
     {
-        _store = store;
-        _sp = sp;
-        _rbac = rbac;
-        _log = log;
+        _store = store; _sp = sp; _rbac = rbac; _log = log;
     }
 
     public async Task RegisterAsync(AutomationDefinition definition, CancellationToken ct = default)
     {
         var data = await _store.LoadAsync(ct);
         data.Definitions.RemoveAll(d => d.Id == definition.Id);
+        definition.ModifiedUtc = DateTime.UtcNow;
         data.Definitions.Add(definition);
         await _store.SaveAsync(data, ct);
     }
@@ -43,9 +41,8 @@ public sealed class AutomationScheduler : BackgroundService, IAutomationSchedule
         var data = await _store.LoadAsync(ct);
         var def = data.Definitions.FirstOrDefault(d => d.Id == id);
         if (def is null) return;
-        await RunAsync(def, ct);
-        data = await _store.LoadAsync(ct);
-        data.LastRunUtc[id.ToString()] = NowMsk;
+        var result = await RunAsync(def, ct);
+        def.LastRunMsk = NowMsk; def.LastRunResult = result;
         await _store.SaveAsync(data, ct);
     }
 
@@ -63,62 +60,132 @@ public sealed class AutomationScheduler : BackgroundService, IAutomationSchedule
     private async Task TickAsync(CancellationToken ct)
     {
         var data = await _store.LoadAsync(ct);
-        var nowMsk = NowMsk;
+        var now = NowMsk;
         var changed = false;
 
         foreach (var def in data.Definitions.Where(d => d.Enabled))
         {
-            var sched = CrontabSchedule.TryParse(def.CronMsk);
-            if (sched is null) continue;
-
-            var last = data.LastRunUtc.TryGetValue(def.Id.ToString(), out var lr) ? lr : nowMsk.AddMinutes(-1);
-            var next = sched.GetNextOccurrence(last);
-            if (next <= nowMsk)
-            {
-                await RunAsync(def, ct);
-                data.LastRunUtc[def.Id.ToString()] = nowMsk;
-                changed = true;
-            }
+            if (!IsDue(def, now)) continue;
+            var result = await RunAsync(def, ct);
+            def.LastRunMsk = now; def.LastRunResult = result;
+            changed = true;
         }
 
         if (changed) await _store.SaveAsync(data, ct);
     }
 
-    private async Task RunAsync(AutomationDefinition def, CancellationToken ct)
+    /// <summary>Пора ли запускать по расписанию (относительно LastRunMsk).</summary>
+    internal static bool IsDue(AutomationDefinition def, DateTime now)
     {
-        using var scope = _sp.CreateScope();
-        var mgmt = scope.ServiceProvider.GetRequiredService<AdManagementService>();
-        var dir = scope.ServiceProvider.GetRequiredService<IAdDirectory>();
-        var actor = new TechnicianContext(_rbac.AutomationSid, "automation", $"Automation: {def.Name}");
-
-        switch (def.TaskType)
+        var s = def.Schedule;
+        var last = def.LastRunMsk;
+        switch (s.Kind)
         {
-            case AutomationTaskTypes.DisableInactiveUsers:
-                await DisableInactiveUsers(def, mgmt, dir, actor, ct);
-                break;
-            case AutomationTaskTypes.Noop:
-                _log.LogInformation("automation '{Name}' noop tick", def.Name);
-                break;
-            default:
-                _log.LogWarning("automation '{Name}': unknown task type {Type}", def.Name, def.TaskType);
-                break;
+            case ScheduleKind.Hourly:
+                var every = Math.Max(1, s.EveryHours);
+                return last is null || (now - last.Value).TotalHours >= every;
+
+            case ScheduleKind.Daily:
+                return DueAtTime(now, last, d => d.Date.AddHours(s.Hour).AddMinutes(s.Minute));
+
+            case ScheduleKind.Weekly:
+                if (now.DayOfWeek != s.DayOfWeek) return false;
+                return DueAtTime(now, last, d => d.Date.AddHours(s.Hour).AddMinutes(s.Minute));
+
+            case ScheduleKind.Monthly:
+                if (now.Day != s.DayOfMonth) return false;
+                return DueAtTime(now, last, d => d.Date.AddHours(s.Hour).AddMinutes(s.Minute));
+
+            case ScheduleKind.Once:
+                return s.RunAtMsk is { } at && now >= at && last is null;
+
+            default: return false;
         }
     }
 
-    private static async Task DisableInactiveUsers(AutomationDefinition def, AdManagementService mgmt, IAdDirectory dir, TechnicianContext actor, CancellationToken ct)
+    /// <summary>Сегодняшнее целевое время наступило и ещё не запускали сегодня после него.</summary>
+    private static bool DueAtTime(DateTime now, DateTime? last, Func<DateTime, DateTime> targetOf)
     {
-        if (!def.Parameters.TryGetValue("ou", out var ou) || string.IsNullOrEmpty(ou)) return;
-        var days = def.Parameters.TryGetValue("days", out var d) && int.TryParse(d, out var dd) ? dd : 90;
-        var cutoff = DateTime.UtcNow.AddDays(-days);
+        var target = targetOf(now);
+        if (now < target) return false;
+        return last is null || last.Value < target;
+    }
 
-        var users = await dir.ListUsersAsync(ou, subtree: true, ct);
-        foreach (var u in users.Where(u => u.Enabled))
+    private async Task<string> RunAsync(AutomationDefinition def, CancellationToken ct)
+    {
+        using var scope = _sp.CreateScope();
+        var sp = scope.ServiceProvider;
+        var mgmt = sp.GetRequiredService<AdManagementService>();
+        var reports = sp.GetRequiredService<IReportService>();
+        var actor = new TechnicianContext(_rbac.AutomationSid, "automation", $"Automation: {def.Name}");
+
+        // 1) объекты из отчёта-источника
+        if (string.IsNullOrEmpty(def.SourceReportKey))
+            return "No source report configured";
+        var report = await reports.RunAsync(def.SourceReportKey, ct);
+        var targets = report.Rows.Select(r => r.Dn).ToList();
+        if (targets.Count == 0) return "0 objects (report empty)";
+
+        // 2) задача к каждому объекту
+        int ok = 0, fail = 0;
+        foreach (var dn in targets)
         {
-            var det = await dir.GetObjectAsync(u.Dn, new[] { "lastLogonTimestamp" }, ct);
-            var raw = det?.Attributes.GetValueOrDefault("lastLogonTimestamp");
-            if (string.IsNullOrEmpty(raw) || !long.TryParse(raw, out var ft) || ft <= 0) continue; // не логинился — пропускаем
-            var last = DateTime.FromFileTimeUtc(ft);
-            if (last < cutoff) await mgmt.SetEnabledAsync(actor, u.Dn, false, ct);
+            var r = await ApplyTaskAsync(def, mgmt, sp, actor, dn, ct);
+            if (r) ok++; else fail++;
+        }
+        var summary = $"{ok} ok, {fail} failed of {targets.Count}";
+        _log.LogInformation("automation '{Name}' ({Task}): {Summary}", def.Name, def.TaskType, summary);
+        return summary;
+    }
+
+    private async Task<bool> ApplyTaskAsync(AutomationDefinition def, AdManagementService mgmt, IServiceProvider sp, TechnicianContext actor, string dn, CancellationToken ct)
+    {
+        try
+        {
+            switch (def.TaskType)
+            {
+                case AutomationTaskTypes.AddToGroup:
+                {
+                    var group = def.Parameters.GetValueOrDefault("groupDn");
+                    if (string.IsNullOrEmpty(group)) return false;
+                    var r = await mgmt.ManageGroupMembershipAsync(actor, group, new[] { dn }, Array.Empty<string>(), ct);
+                    return r.Success;
+                }
+                case AutomationTaskTypes.RemoveFromGroup:
+                {
+                    var group = def.Parameters.GetValueOrDefault("groupDn");
+                    if (string.IsNullOrEmpty(group)) return false;
+                    var r = await mgmt.ManageGroupMembershipAsync(actor, group, Array.Empty<string>(), new[] { dn }, ct);
+                    return r.Success;
+                }
+                case AutomationTaskTypes.DisableUsers:
+                    return (await mgmt.SetEnabledAsync(actor, dn, false, ct)).Success;
+                case AutomationTaskTypes.EnableUsers:
+                    return (await mgmt.SetEnabledAsync(actor, dn, true, ct)).Success;
+                case AutomationTaskTypes.MoveUsers:
+                {
+                    var ou = def.Parameters.GetValueOrDefault("targetOu");
+                    if (string.IsNullOrEmpty(ou)) return false;
+                    return (await mgmt.MoveAsync(actor, dn, ou, ct)).Success;
+                }
+                case AutomationTaskTypes.UnlockUsers:
+                    return (await mgmt.UnlockAsync(actor, dn, ct)).Success;
+                case AutomationTaskTypes.HideFromAddressLists:
+                {
+                    var ex = sp.GetService<ExchangeManagementService>();
+                    if (ex is null) return false;
+                    var r = await ex.SetMailboxPropertiesAsync(actor, dn, new MailboxProperties(HiddenFromAddressLists: true), ct);
+                    return r.Success;
+                }
+                default:
+                    _log.LogWarning("automation '{Name}': unknown task {Task}", def.Name, def.TaskType);
+                    return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "automation '{Name}' task failed on {Dn}", def.Name, dn);
+            return false;
         }
     }
 
