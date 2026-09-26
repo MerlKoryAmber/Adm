@@ -25,21 +25,29 @@
             @foreach (var u in locals)
             {
                 <tr>
-                    <td><b>@u.UserName</b></td>
+                    <td><b>@u.UserName</b> @if (u.IsBuiltin) { <span class="badge">Built-in</span> }</td>
                     <td>@u.DisplayName</td>
                     <td>@if (u.IsSuperAdmin) { <span class="badge warn">Super admin</span> } else { <span class="muted">—</span> }</td>
                     <td>@if (u.Disabled) { <span class="badge">Disabled</span> } else { <span class="badge ok">Enabled</span> }</td>
                     <td style="white-space:nowrap">
-                        <button @onclick="() => ToggleDisabled(u)">@(u.Disabled ? "Enable" : "Disable")</button>
-                        <button @onclick="() => StartResetPw(u.Id)">Reset password</button>
-                        @if (confirmDelete == u.Id)
+                        @if (u.IsBuiltin)
                         {
-                            <button class="danger" @onclick="() => DeleteLocal(u.Id)">Confirm delete</button>
-                            <button @onclick="() => confirmDelete = null">Cancel</button>
+                            <button @onclick="() => StartResetPw(u.Id)">Reset password</button>
+                            <span class="hint" style="margin-left:6px">Built-in account — cannot be disabled or deleted.</span>
                         }
                         else
                         {
-                            <button class="danger" @onclick="() => confirmDelete = u.Id">Delete</button>
+                            <button @onclick="() => ToggleDisabled(u)">@(u.Disabled ? "Enable" : "Disable")</button>
+                            <button @onclick="() => StartResetPw(u.Id)">Reset password</button>
+                            @if (confirmDelete == u.Id)
+                            {
+                                <button class="danger" @onclick="() => DeleteLocal(u.Id)">Confirm delete</button>
+                                <button @onclick="() => confirmDelete = null">Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="danger" @onclick="() => confirmDelete = u.Id">Delete</button>
+                            }
                         }
                     </td>
                 </tr>
@@ -149,6 +157,7 @@
 
     private async Task ToggleDisabled(LocalUser u)
     {
+        if (u.IsBuiltin) { ok = false; banner = "Built-in account cannot be disabled."; return; }
         u.Disabled = !u.Disabled;
         await LocalUsers.SaveAsync(u);
         await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", u.UserName, u.Disabled ? "Disabled" : "Enabled");
@@ -169,7 +178,9 @@
 
     private async Task DeleteLocal(Guid id)
     {
-        var nm = (await LocalUsers.GetByIdAsync(id))?.UserName ?? id.ToString();
+        var target = await LocalUsers.GetByIdAsync(id);
+        if (target?.IsBuiltin == true) { ok = false; banner = "Built-in account cannot be deleted."; confirmDelete = null; return; }
+        var nm = target?.UserName ?? id.ToString();
         await LocalUsers.DeleteAsync(id);
         await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", nm, "Deleted");
         confirmDelete = null;

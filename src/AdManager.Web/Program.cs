@@ -274,13 +274,16 @@ if (useEfStore)
     }
 }
 
-// Сид локального admin/admin при пустой таблице локальных УЗ (ADR-0007).
+// Сид встроенного admin + роли Administrators при установке (ADR-0007):
+// admin (builtin) состоит во встроенной роли Administrators (super-admin, builtin).
 if (useEfStore)
 {
     try
     {
         using var scope = app.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<ILocalAuthService>().EnsureSeedAdminAsync();
+        var sp = scope.ServiceProvider;
+        await sp.GetRequiredService<ILocalAuthService>().EnsureSeedAdminAsync();
+        await AdManager.Web.BootstrapAdmin.EnsureAsync(sp);
     }
     catch (Exception ex)
     {

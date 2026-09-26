@@ -31,14 +31,19 @@ else
                 <table><tbody>
                     @foreach (var r in cfg.Roles)
                     {
-                        <tr><td><b>@r.Name</b> @if (r.IsSuperAdmin) { <span class="badge warn">Super admin</span> }
+                        var inUse = cfg.Assignments.Any(a => a.RoleId == r.Id);
+                        <tr><td><b>@r.Name</b> @if (r.IsSuperAdmin) { <span class="badge warn">Super admin</span> } @if (r.IsBuiltin) { <span class="badge">Built-in</span> }
                             <div class="hint">@(r.IsSuperAdmin ? "Full access (bypasses scope)" : string.Join(", ", r.Permissions.Select(PermissionLabel)))</div>
                             @if (r.Permissions.Contains(Permission.CreateUser) && r.CreateUserFields.Count > 0)
                             { <div class="hint">Create fields: @string.Join(", ", r.CreateUserFields.Select(FieldCatalog.Label))</div> }
                             @if (r.Permissions.Contains(Permission.ModifyAttributes) && r.ModifyUserFields.Count > 0)
                             { <div class="hint">Modify fields: @string.Join(", ", r.ModifyUserFields.Select(FieldCatalog.Label))</div> }
                             </td>
-                            <td><button class="danger" @onclick="() => DeleteRole(r.Id)">Delete</button></td></tr>
+                            <td>
+                                @if (r.IsBuiltin) { <span class="hint">Built-in</span> }
+                                else if (inUse) { <span class="hint" title="Remove assignments first">In use</span> }
+                                else { <button class="danger" @onclick="() => DeleteRole(r.Id)">Delete</button> }
+                            </td></tr>
                     }
                 </tbody></table>
             }
@@ -517,9 +522,12 @@ else
     }
     private async Task DeleteRole(Guid id)
     {
-        var name = cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? id.ToString();
+        var role = cfg!.Roles.FirstOrDefault(r => r.Id == id);
+        if (role is null) return;
+        if (role.IsBuiltin) { ok = false; banner = "Built-in role cannot be deleted."; return; }
+        if (cfg.Assignments.Any(a => a.RoleId == id)) { ok = false; banner = "Role is in use by assignments — remove them first."; return; }
         cfg.Roles.RemoveAll(r => r.Id == id); await Save("Role deleted.");
-        await ConfigAudit.WriteAsync(Audit, await Actor(), "Help Desk Role", name, "Deleted");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Help Desk Role", role.Name, "Deleted");
     }
 
     private async Task CreateScope()

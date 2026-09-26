@@ -89,12 +89,14 @@ public sealed class LocalAuthService : ILocalAuthService
         var existing = await _store.ListAsync(ct);
         if (existing.Count > 0) return; // уже есть локальные УЗ — не сидируем
 
-        // ADR-0007: admin/admin как супер-админ при пустой таблице. Смена пароля не принуждается.
+        // ADR-0007: встроенный admin/admin при установке. Член встроенной роли Administrators
+        // (сид роли+назначения — в Web bootstrap). Смена пароля не принуждается.
         var admin = new LocalUser
         {
             UserName = "admin",
             DisplayName = "Administrator (local)",
             IsSuperAdmin = true,
+            IsBuiltin = true,
             PasswordHash = HashPassword("admin"),
         };
         await _store.SaveAsync(admin, ct);

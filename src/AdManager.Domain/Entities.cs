@@ -21,6 +21,9 @@ public sealed class HelpDeskRole
     /// но управляется через UI). Носителя такой роли RBAC считает супер-админом.</summary>
     public bool IsSuperAdmin { get; init; }
 
+    /// <summary>Встроенная роль (Administrators, сид при установке). Нельзя удалять.</summary>
+    public bool IsBuiltin { get; init; }
+
     /// <summary>Ключи полей (FieldCatalog), которые роль разрешает задавать при создании пользователя.
     /// Пустой набор = ограничений нет (все поля), обратная совместимость. Уточняет <see cref="Permission.CreateUser"/>.</summary>
     public HashSet<string> CreateUserFields { get; init; } = new();

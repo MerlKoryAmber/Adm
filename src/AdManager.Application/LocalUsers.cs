@@ -13,6 +13,8 @@ public sealed class LocalUser
     public string DisplayName { get; set; } = "";
     public bool Disabled { get; set; }
     public bool IsSuperAdmin { get; set; }
+    /// <summary>Встроенная УЗ (сид admin при установке). Нельзя удалять/отключать.</summary>
+    public bool IsBuiltin { get; set; }
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     /// <summary>Стабильный синтетический SID для RBAC/аудита.</summary>
