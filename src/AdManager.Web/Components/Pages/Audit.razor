@@ -30,7 +30,7 @@ else
                         <td>@e.ActorName</td>
                         <td>@e.Operation</td>
                         <td>@e.Phase</td>
-                        <td style="max-width:320px;word-break:break-all">@e.TargetDn</td>
+                        <td style="max-width:320px;word-break:break-all">@DnFormat.Friendly(e.TargetDn)</td>
                         <td>
                             @if (e.Phase == AuditPhase.Attempt)
                             {

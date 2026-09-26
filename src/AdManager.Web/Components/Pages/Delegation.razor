@@ -247,7 +247,7 @@ else
                         <td>@e.TimestampMsk.ToString("yyyy-MM-dd HH:mm:ss")</td>
                         <td>@e.ActorName</td>
                         <td>@PermissionLabel(e.Operation)</td>
-                        <td style="max-width:320px;word-break:break-all">@e.TargetDn</td>
+                        <td style="max-width:320px;word-break:break-all">@DnFormat.Friendly(e.TargetDn)</td>
                         <td><span class="badge @(e.Success ? "ok" : "off")">@(e.Success ? "success" : "fail")</span></td>
                         <td>@e.Message</td>
                     </tr>

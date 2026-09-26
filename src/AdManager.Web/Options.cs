@@ -3,6 +3,36 @@ using AdManager.Application.Abstractions;
 
 namespace AdManager.Web;
 
+/// <summary>Человекочитаемое представление DN для UI (без LDAP DC=… — у нас не LDAP-консоль).</summary>
+public static class DnFormat
+{
+    /// <summary>DN → путь без доменных компонентов: "CN=John,OU=Sales,DC=x,DC=y" → "Sales / John".
+    /// Порядок сверху вниз (родитель → объект). Экранированные запятые сохраняются.</summary>
+    public static string Friendly(string? dn)
+    {
+        if (string.IsNullOrWhiteSpace(dn)) return "";
+        var parts = SplitDn(dn)
+            .Where(p => !p.StartsWith("DC=", StringComparison.OrdinalIgnoreCase))
+            .Select(p => { var i = p.IndexOf('='); return i >= 0 ? p[(i + 1)..].Trim() : p.Trim(); })
+            .ToList();
+        parts.Reverse(); // сверху вниз
+        return parts.Count == 0 ? dn : string.Join(" / ", parts);
+    }
+
+    private static IEnumerable<string> SplitDn(string dn)
+    {
+        // разбиение по запятым, не экранированным обратным слэшем
+        var cur = new System.Text.StringBuilder();
+        for (int i = 0; i < dn.Length; i++)
+        {
+            var c = dn[i];
+            if (c == ',' && (i == 0 || dn[i - 1] != '\\')) { yield return cur.ToString(); cur.Clear(); }
+            else cur.Append(c);
+        }
+        if (cur.Length > 0) yield return cur.ToString();
+    }
+}
+
 /// <summary>Параметры UI: какие OU показывать (лаба по умолчанию).</summary>
 public sealed class UiOptions
 {
