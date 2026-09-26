@@ -67,8 +67,30 @@ public sealed class FileAuditLog : IAuditLog
             if (query.ToMsk is { } to && entry.TimestampMsk > to) continue;
             if (!string.IsNullOrEmpty(query.ActorSid) && entry.ActorSid != query.ActorSid) continue;
             if (!string.IsNullOrEmpty(query.TargetDn) && entry.TargetDn != query.TargetDn) continue;
+            if (query.Kind is { } kind && entry.Kind != kind) continue;
             items.Add(entry);
         }
-        return items.Take(query.Take).ToList();
+        return items.OrderByDescending(x => x.TimestampMsk).Take(query.Take).ToList();
+    }
+
+    public async Task<int> PurgeOlderThanAsync(DateTimeOffset cutoffUtc, CancellationToken ct = default)
+    {
+        if (!File.Exists(_path)) return 0;
+        var lines = await File.ReadAllLinesAsync(_path, ct);
+        var kept = new List<string>();
+        int removed = 0;
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try
+            {
+                var e = JsonSerializer.Deserialize<AuditEntry>(line, Json);
+                if (e != null && e.TimestampMsk < cutoffUtc) { removed++; continue; }
+            }
+            catch (JsonException) { /* битую строку сохраняем как есть */ }
+            kept.Add(line);
+        }
+        lock (_lock) { File.WriteAllLines(_path, kept); }
+        return removed;
     }
 }

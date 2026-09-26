@@ -2,6 +2,7 @@
 @inject ISettingsStore Store
 @inject IKeyring Keyring
 @inject ISecretProtector Protector
+@inject IAuditLog Audit
 
 <PageTitle>Settings — admanager</PageTitle>
 <h1>Settings</h1>
@@ -142,6 +143,13 @@ else
         <div class="hint">Generates a new key and re-encrypts all stored secrets with it. Back up the new key afterwards; the old key stops being used.</div>
     </div>
 
+    <div class="panel" style="max-width:640px;margin-top:16px">
+        <h3>Audit logs</h3>
+        <label>Retention (days)</label>
+        <input type="number" min="0" @bind="model.AuditRetentionDays" />
+        <div class="hint">How long audit / logon records are kept. Records older than this are removed daily. 0 = keep forever.</div>
+    </div>
+
     <div class="btnrow" style="margin-top:16px;max-width:640px">
         <button class="primary" @onclick="Save">Save settings</button>
     </div>
@@ -160,10 +168,17 @@ else
         keyFingerprint = Keyring.KeyFingerprint();
     }
 
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
     private async Task Save()
     {
         if (model is null) return;
-        try { await Store.SaveAsync(model); ok = true; banner = "Settings saved."; }
+        try
+        {
+            await Store.SaveAsync(model); ok = true; banner = "Settings saved.";
+            var p = AuthState is null ? null : (await AuthState).User;
+            await ConfigAudit.WriteAsync(Audit, CurrentUser.From(p), "Settings", "Application settings", "Modified");
+        }
         catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
     }
 

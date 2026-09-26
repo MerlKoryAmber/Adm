@@ -63,7 +63,8 @@ public sealed record AuditQuery(
     DateTimeOffset? ToMsk = null,
     string? ActorSid = null,
     string? TargetDn = null,
-    int Take = 200);
+    int Take = 200,
+    AuditKind? Kind = null);
 
 public sealed record AutomationDefinition(
     Guid Id,
@@ -162,6 +163,8 @@ public interface IAuditLog
 {
     Task WriteAsync(AuditEntry entry, CancellationToken ct = default);
     Task<IReadOnlyList<AuditEntry>> QueryAsync(AuditQuery query, CancellationToken ct = default);
+    /// <summary>Удалить записи старше указанной даты (retention). Возвращает число удалённых.</summary>
+    Task<int> PurgeOlderThanAsync(DateTimeOffset cutoffUtc, CancellationToken ct = default);
 }
 
 /// <summary>Отдаёт identity/креды для операций: gMSA (процесс) или хранимая УЗ.</summary>

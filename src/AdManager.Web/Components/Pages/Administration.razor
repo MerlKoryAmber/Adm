@@ -2,6 +2,7 @@
 @inject ILocalUserStore LocalUsers
 @inject ILocalAuthService LocalAuth
 @inject IRbacStore Rbac
+@inject IAuditLog Audit
 
 <PageTitle>Administration — admanager</PageTitle>
 <h1>Panel users</h1>
@@ -136,7 +137,9 @@
                 IsSuperAdmin = newSuper,
                 PasswordHash = LocalAuth.HashPassword(newPass),
             };
+            var nm = u.UserName;
             await LocalUsers.SaveAsync(u);
+            await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", nm, "Created");
             newName = newDisplay = newPass = ""; newSuper = false;
             ok = true; banner = "Local account created.";
             await Load();
@@ -148,6 +151,7 @@
     {
         u.Disabled = !u.Disabled;
         await LocalUsers.SaveAsync(u);
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", u.UserName, u.Disabled ? "Disabled" : "Enabled");
         ok = true; banner = $"{u.UserName} {(u.Disabled ? "disabled" : "enabled")}.";
         await Load();
     }
@@ -158,15 +162,25 @@
     {
         u.PasswordHash = LocalAuth.HashPassword(resetPwValue);
         await LocalUsers.SaveAsync(u);
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", u.UserName, "Password reset");
         resetPwId = null; resetPwValue = "";
         ok = true; banner = $"Password updated for {u.UserName}.";
     }
 
     private async Task DeleteLocal(Guid id)
     {
+        var nm = (await LocalUsers.GetByIdAsync(id))?.UserName ?? id.ToString();
         await LocalUsers.DeleteAsync(id);
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Local User", nm, "Deleted");
         confirmDelete = null;
         ok = true; banner = "Local account deleted.";
         await Load();
+    }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
     }
 }

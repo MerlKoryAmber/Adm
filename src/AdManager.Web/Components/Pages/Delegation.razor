@@ -3,6 +3,7 @@
 @inject IAdDirectory Dir
 @inject IUserTemplateStore Templates
 @inject UiOptions Ui
+@inject IAuditLog Audit
 
 <PageTitle>Delegation — admanager</PageTitle>
 <h1>Delegation</h1>
@@ -213,12 +214,178 @@ else
         <div class="btnrow"><button class="primary" @onclick="CreateAssignment" disabled="@(string.IsNullOrWhiteSpace(asgSid) || string.IsNullOrEmpty(asgRole) || string.IsNullOrEmpty(asgScope))">Create assignment</button></div>
     </div>
     }
+
+    @* ---------- Help Desk Audit Reports ---------- *@
+    @if (section == "audit-report")
+    {
+        <div class="panel">
+            <h3>Audit Report</h3>
+            <div class="hint">Management actions performed by help-desk technicians over AD. Times in MSK.</div>
+            <div style="display:flex;gap:12px;align-items:flex-end;margin:10px 0;flex-wrap:wrap">
+                <div><label>Technician</label>
+                    <select @bind="repActor">
+                        <option value="">All</option>
+                        @foreach (var a in repActors) { <option value="@a.Sid">@a.Name</option> }
+                    </select></div>
+                <div><label>Period</label>
+                    <select @bind="repPeriod">
+                        <option value="1">Last 24 hours</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="0">All</option>
+                    </select></div>
+                <button class="primary" @onclick="() => LoadReport(AuditKind.AdOperation)">Go</button>
+            </div>
+            @if (repRows is null) { <p class="muted">Select filters and click Go.</p> }
+            else if (repRows.Count == 0) { <p class="muted">No records.</p> }
+            else
+            {
+                <table><thead><tr><th>Time (MSK)</th><th>Technician</th><th>Action</th><th>Target</th><th>Status</th><th>Message</th></tr></thead><tbody>
+                @foreach (var e in repRows)
+                {
+                    <tr>
+                        <td>@e.TimestampMsk.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@e.ActorName</td>
+                        <td>@PermissionLabel(e.Operation)</td>
+                        <td style="max-width:320px;word-break:break-all">@e.TargetDn</td>
+                        <td><span class="badge @(e.Success ? "ok" : "off")">@(e.Success ? "success" : "fail")</span></td>
+                        <td>@e.Message</td>
+                    </tr>
+                }
+                </tbody></table>
+                <p class="hint">@repRows.Count record(s)</p>
+            }
+        </div>
+    }
+
+    @if (section == "admin-audit")
+    {
+        <div class="panel">
+            <h3>Admin Audit Report</h3>
+            <div class="hint">Changes to panel configuration: roles, scopes, assignments, local accounts, settings.</div>
+            <div style="display:flex;gap:12px;align-items:flex-end;margin:10px 0">
+                <div><label>Period</label>
+                    <select @bind="repPeriod">
+                        <option value="1">Last 24 hours</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="0">All</option>
+                    </select></div>
+                <button class="primary" @onclick="() => LoadReport(AuditKind.ConfigChange)">Go</button>
+            </div>
+            @if (repRows is null) { <p class="muted">Select a period and click Go.</p> }
+            else if (repRows.Count == 0) { <p class="muted">No records.</p> }
+            else
+            {
+                <table><thead><tr><th>Time (MSK)</th><th>Managed By</th><th>Feature</th><th>Instance</th><th>Action</th></tr></thead><tbody>
+                @foreach (var e in repRows)
+                {
+                    <tr>
+                        <td>@e.TimestampMsk.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@e.ActorName</td>
+                        <td>@e.Feature</td>
+                        <td>@e.Instance</td>
+                        <td>@e.Action</td>
+                    </tr>
+                }
+                </tbody></table>
+                <p class="hint">@repRows.Count record(s)</p>
+            }
+        </div>
+    }
+
+    @* ---------- Help Desk Reports ---------- *@
+    @if (section == "technicians-report")
+    {
+        <div class="panel">
+            <h3>Technicians Report</h3>
+            <div class="hint">All subjects with delegated access: their roles, scopes and field limits.</div>
+            @if (cfg.Assignments.Count == 0) { <p class="muted">No assignments yet.</p> }
+            else
+            {
+                <table><thead><tr><th>Subject</th><th>Type</th><th>Role</th><th>Scope (OUs)</th><th>Templates</th></tr></thead><tbody>
+                @foreach (var a in cfg.Assignments)
+                {
+                    var role = cfg.Roles.FirstOrDefault(r => r.Id == a.RoleId);
+                    var scope = cfg.Scopes.FirstOrDefault(s => s.Id == a.ScopeId);
+                    <tr>
+                        <td><b>@(a.SubjectName ?? a.SubjectSid)</b></td>
+                        <td>@a.SubjectType</td>
+                        <td>@(role is null ? "—" : (role.IsSuperAdmin ? "Super admin" : role.Name))</td>
+                        <td style="max-width:340px">@(scope is null ? "—" : $"{scope.Name} ({scope.OuDns.Count} OU)")</td>
+                        <td>@(a.CreateTemplateId is null && a.ModifyTemplateId is null ? "—" : "enforced")</td>
+                    </tr>
+                }
+                </tbody></table>
+                <p class="hint">@cfg.Assignments.Count assignment(s). Domain admins and super-admins have full access without assignments.</p>
+            }
+        </div>
+    }
+
+    @if (section == "logon-report")
+    {
+        <div class="panel">
+            <h3>Technician Logon Report</h3>
+            <div class="hint">Logon history of panel users (local and domain). Times in MSK.</div>
+            <div style="display:flex;gap:12px;align-items:flex-end;margin:10px 0">
+                <div><label>Period</label>
+                    <select @bind="repPeriod">
+                        <option value="1">Today</option>
+                        <option value="7">Last 7 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="0">All</option>
+                    </select></div>
+                <button class="primary" @onclick="() => LoadReport(AuditKind.Logon)">Go</button>
+            </div>
+            @if (repRows is null) { <p class="muted">Select a period and click Go.</p> }
+            else if (repRows.Count == 0) { <p class="muted">No records.</p> }
+            else
+            {
+                <table><thead><tr><th>Time (MSK)</th><th>Technician</th><th>Host</th><th>Method</th><th>Status</th><th>Message</th></tr></thead><tbody>
+                @foreach (var e in repRows)
+                {
+                    <tr>
+                        <td>@e.TimestampMsk.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@e.ActorName</td>
+                        <td>@e.Host</td>
+                        <td>@e.Method</td>
+                        <td><span class="badge @(e.Success ? "ok" : "off")">@(e.Success ? "success" : "fail")</span></td>
+                        <td>@e.Message</td>
+                    </tr>
+                }
+                </tbody></table>
+                <p class="hint">@repRows.Count record(s)</p>
+            }
+        </div>
+    }
 }
 </RequireAccess>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private RbacConfig? cfg;
     private string? banner; private bool ok;
+
+    private async Task<TechnicianContext> Actor()
+    {
+        var p = AuthState is null ? null : (await AuthState).User;
+        return CurrentUser.From(p);
+    }
+
+    // --- отчёты (Audit / Admin Audit / Logon) ---
+    private string repActor = "";
+    private string repPeriod = "7";
+    private List<AuditEntry>? repRows;
+    private List<(string Sid, string Name)> repActors = new();
+
+    private async Task LoadReport(AuditKind kind)
+    {
+        DateTimeOffset? from = null;
+        if (int.TryParse(repPeriod, out var days) && days > 0)
+            from = MskTime.Now.AddDays(-days);
+        var actor = kind == AuditKind.AdOperation && !string.IsNullOrEmpty(repActor) ? repActor : null;
+        repRows = (await Audit.QueryAsync(new AuditQuery(FromMsk: from, ActorSid: actor, Take: 500, Kind: kind))).ToList();
+    }
 
     private static readonly string[] SuperNames = { "merl", "Domain Admins" };
 
@@ -305,16 +472,23 @@ else
     [SupplyParameterFromQuery(Name = "s")] private string? S { get; set; }
     private string section = "roles";
 
+    private static readonly string[] KnownSections =
+        { "roles", "scopes", "assignments", "audit-report", "admin-audit", "technicians-report", "logon-report" };
+
     protected override async Task OnInitializedAsync()
     {
         cfg = await Store.LoadAsync();
         var tpls = await Templates.ListAsync();
         createTemplates = tpls.Where(t => t.Kind == "Create").ToList();
         modifyTemplates = tpls.Where(t => t.Kind == "Modify").ToList();
+        // техники для фильтра Audit Report (уникальные субъекты назначений)
+        repActors = cfg.Assignments
+            .Select(a => (Sid: a.SubjectSid, Name: a.SubjectName ?? a.SubjectSid))
+            .DistinctBy(x => x.Sid).OrderBy(x => x.Name).ToList();
     }
 
     protected override void OnParametersSet()
-        => section = S is "roles" or "scopes" or "assignments" ? S : "roles";
+        => section = KnownSections.Contains(S) ? S! : "roles";
 
     private string RoleName(Guid id) => cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? "?";
     private string ScopeName(Guid id) => cfg!.Scopes.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
@@ -336,19 +510,33 @@ else
             CreateUserFields = rolePerms.Contains(Permission.CreateUser) ? new HashSet<string>(createFields) : new(),
             ModifyUserFields = rolePerms.Contains(Permission.ModifyAttributes) ? new HashSet<string>(modifyFields) : new(),
         });
+        var name = roleName.Trim();
         await Save("Role created.");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Help Desk Role", name, "Created");
         roleName = ""; roleIsSuper = false; rolePerms.Clear(); createFields.Clear(); modifyFields.Clear();
     }
-    private async Task DeleteRole(Guid id) { cfg!.Roles.RemoveAll(r => r.Id == id); await Save("Role deleted."); }
+    private async Task DeleteRole(Guid id)
+    {
+        var name = cfg!.Roles.FirstOrDefault(r => r.Id == id)?.Name ?? id.ToString();
+        cfg.Roles.RemoveAll(r => r.Id == id); await Save("Role deleted.");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Help Desk Role", name, "Deleted");
+    }
 
     private async Task CreateScope()
     {
         // Каскад дерева уже перечислил всех выбранных потомков явно, поэтому
         // IncludeSubtree=false (список OuDns полон). Семантика "с детьми" — через выбор.
-        cfg!.Scopes.Add(new DelegationScope { Name = scopeName.Trim(), OuDns = scopeOus.ToList(), IncludeSubtree = false });
+        var name = scopeName.Trim();
+        cfg!.Scopes.Add(new DelegationScope { Name = name, OuDns = scopeOus.ToList(), IncludeSubtree = false });
         await Save("Scope created."); scopeName = ""; scopeOus.Clear();
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Scope", name, "Created");
     }
-    private async Task DeleteScope(Guid id) { cfg!.Scopes.RemoveAll(s => s.Id == id); await Save("Scope deleted."); }
+    private async Task DeleteScope(Guid id)
+    {
+        var name = cfg!.Scopes.FirstOrDefault(s => s.Id == id)?.Name ?? id.ToString();
+        cfg.Scopes.RemoveAll(s => s.Id == id); await Save("Scope deleted.");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Scope", name, "Deleted");
+    }
 
     private async Task FindSubject()
     {
@@ -383,10 +571,18 @@ else
             CreateTemplateId = Guid.TryParse(asgCreateTpl, out var ctId) ? ctId : null,
             ModifyTemplateId = Guid.TryParse(asgModifyTpl, out var mtId) ? mtId : null,
         });
+        var subj = string.IsNullOrWhiteSpace(asgName) ? asgSid : asgName;
         await Save("Assignment created.");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Assignment", subj, "Created");
         asgSid = ""; asgName = ""; asgRole = ""; asgScope = ""; asgCreateTpl = ""; asgModifyTpl = "";
     }
-    private async Task DeleteAssignment(Guid id) { cfg!.Assignments.RemoveAll(a => a.Id == id); await Save("Assignment deleted."); }
+    private async Task DeleteAssignment(Guid id)
+    {
+        var a0 = cfg!.Assignments.FirstOrDefault(a => a.Id == id);
+        var subj = a0?.SubjectName ?? a0?.SubjectSid ?? id.ToString();
+        cfg.Assignments.RemoveAll(a => a.Id == id); await Save("Assignment deleted.");
+        await ConfigAudit.WriteAsync(Audit, await Actor(), "Assignment", subj, "Deleted");
+    }
 
     private async Task Save(string msg)
     {

@@ -66,6 +66,17 @@ public enum AuditPhase
     Result,
 }
 
+/// <summary>Тип аудит-записи (для разных отчётов Delegation, эталон ADManager Plus):
+/// AdOperation — операция техника над AD (Audit Report);
+/// ConfigChange — изменение конфигурации панели: роли/скоупы/назначения/УЗ/настройки (Admin Audit Report);
+/// Logon — вход техника в панель (Technician Logon Report).</summary>
+public enum AuditKind
+{
+    AdOperation,
+    ConfigChange,
+    Logon,
+}
+
 /// <summary>Неизменяемая запись аудита.</summary>
 public sealed record AuditEntry
 {
@@ -74,17 +85,35 @@ public sealed record AuditEntry
     /// <summary>Attempt пишется ДО операции, Result — ПОСЛЕ (закрывает окно неаудируемого изменения).</summary>
     public AuditPhase Phase { get; init; } = AuditPhase.Result;
 
+    /// <summary>Тип записи (AD-операция / изменение конфига / вход). По умолчанию AdOperation.</summary>
+    public AuditKind Kind { get; init; } = AuditKind.AdOperation;
+
     /// <summary>Время в МСК (§20).</summary>
     public required DateTimeOffset TimestampMsk { get; init; }
     public required string ActorSid { get; init; }
     public required string ActorName { get; init; }
-    public required Permission Operation { get; init; }
-    public required string TargetDn { get; init; }
+    /// <summary>Для AdOperation — операция AD; для Config/Logon — не значима (Operation.None-подобное).</summary>
+    public Permission Operation { get; init; }
+    public string TargetDn { get; init; } = "";
     public string? Before { get; init; }
     public string? After { get; init; }
     public required bool Success { get; init; }
     public string? Message { get; init; }
     public string? CorrelationId { get; init; }
+
+    // --- ConfigChange (Admin Audit Report) ---
+    /// <summary>Раздел панели: "Help Desk Role", "Scope", "Assignment", "Local User", "Settings"…</summary>
+    public string? Feature { get; init; }
+    /// <summary>Имя изменённого объекта (роль "L1", УЗ "operator1"…).</summary>
+    public string? Instance { get; init; }
+    /// <summary>Действие: "Created" | "Modified" | "Deleted".</summary>
+    public string? Action { get; init; }
+
+    // --- Logon (Technician Logon Report) ---
+    /// <summary>IP/хост, с которого вход.</summary>
+    public string? Host { get; init; }
+    /// <summary>Способ входа: "Password" (локальный) | "SSO" (Windows/Negotiate).</summary>
+    public string? Method { get; init; }
 }
 
 public sealed record OperationResult(bool Success, string? Message = null, string? CorrelationId = null)

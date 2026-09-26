@@ -24,6 +24,10 @@ public sealed class EfAuditLog : IAuditLog
         if (query.ToMsk is { } to) q = q.Where(x => x.TimestampMsk <= to);
         if (!string.IsNullOrEmpty(query.ActorSid)) q = q.Where(x => x.ActorSid == query.ActorSid);
         if (!string.IsNullOrEmpty(query.TargetDn)) q = q.Where(x => x.TargetDn == query.TargetDn);
+        if (query.Kind is { } kind) q = q.Where(x => x.Kind == kind);
         return await q.OrderByDescending(x => x.TimestampMsk).Take(query.Take).ToListAsync(ct);
     }
+
+    public async Task<int> PurgeOlderThanAsync(DateTimeOffset cutoffUtc, CancellationToken ct = default)
+        => await _db.Audit.Where(x => x.TimestampMsk < cutoffUtc).ExecuteDeleteAsync(ct);
 }

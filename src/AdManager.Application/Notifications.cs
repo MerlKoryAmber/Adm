@@ -75,6 +75,8 @@ public sealed class AppSettings
     public PasswordExpiryPolicy PasswordExpiry { get; set; } = new();
     /// <summary>Operational identity: gMSA или хранимая УЗ (ADR-0006, из .env перенесено в БД).</summary>
     public StoredCredentialSettings OperationalCredential { get; set; } = new();
+    /// <summary>Срок хранения логов аудита (дней). 0 = не чистить. По умолчанию 365.</summary>
+    public int AuditRetentionDays { get; set; } = 365;
     public DateTime? LastRunUtc { get; set; }
     public string? LastRunResult { get; set; }
 }

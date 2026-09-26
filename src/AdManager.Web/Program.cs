@@ -41,6 +41,8 @@ builder.Services.AddSingleton<IOuTreeProvider>(sp =>
         sp.GetRequiredService<UiOptions>().BaseDn,
         sp.GetRequiredService<ILoggerFactory>().CreateLogger<OuTreeCache>()));
 builder.Services.AddHostedService<OuTreeRefresher>();
+// Retention аудита: раз в сутки чистит записи старше AuditRetentionDays (Settings).
+builder.Services.AddHostedService<AuditRetentionService>();
 // Провайдер аудита: ADMGR_AUDIT=Ef (SQL, по умолчанию) | File (JSONL, без БД).
 var auditProvider = Environment.GetEnvironmentVariable("ADMGR_AUDIT")
                     ?? builder.Configuration["Audit:Provider"] ?? "Ef";
@@ -224,7 +226,28 @@ if (needsDb)
     try
     {
         using var scope = app.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<AdManagerDbContext>().Database.EnsureCreated();
+        var db = scope.ServiceProvider.GetRequiredService<AdManagerDbContext>();
+        db.Database.EnsureCreated();
+        // EnsureCreated не мигрирует существующую схему. Новые колонки аудита
+        // (Kind/Feature/Instance/Action/Host/Method — отчёты Delegation) добавляем idempotent ALTER.
+        foreach (var col in new[]
+        {
+            "Kind INT NOT NULL DEFAULT 0",
+            "Feature NVARCHAR(MAX) NULL",
+            "Instance NVARCHAR(MAX) NULL",
+            "Action NVARCHAR(MAX) NULL",
+            "Host NVARCHAR(MAX) NULL",
+            "Method NVARCHAR(MAX) NULL",
+        })
+        {
+            var name = col.Split(' ')[0];
+            try
+            {
+                db.Database.ExecuteSqlRaw(
+                    $"IF COL_LENGTH('AuditEntries', '{name}') IS NULL ALTER TABLE [AuditEntries] ADD {col};");
+            }
+            catch (Exception ex) { app.Logger.LogWarning(ex, "Audit column {Col} add skipped", name); }
+        }
     }
     catch (Exception ex)
     {
@@ -284,13 +307,37 @@ if (requireAuth)
 }
 app.UseAuthorization();
 app.UseAntiforgery();
+
+// Запись доменного SSO-входа (Technician Logon Report): у Windows Auth нет явного
+// login-шага, поэтому пишем при первом аутентифицированном запросе на SID (дедуп по окну).
+if (requireAuth && useEfStore)
+{
+    app.Use(async (ctx, next) =>
+    {
+        var u = ctx.User;
+        if (u?.Identity?.IsAuthenticated == true
+            && u.Identity.AuthenticationType != "AdmgrCookie") // cookie-вход уже записан в /auth/login
+        {
+            var actor = AdManager.Web.CurrentUser.From(u);
+            if (!actor.Sid.StartsWith("LOCAL:", StringComparison.Ordinal)
+                && AdManager.Web.SsoLogonTracker.ShouldLog(actor.Sid))
+            {
+                var audit = ctx.RequestServices.GetRequiredService<IAuditLog>();
+                var host = ctx.Connection.RemoteIpAddress?.ToString() ?? "";
+                await AdManager.Web.LogonAudit.WriteAsync(audit, actor.Sid, actor.DisplayName, host, "SSO", success: true, "Success");
+            }
+        }
+        await next();
+    });
+}
+
 app.MapGet("/health", () => Results.Ok(new { status = "ok", ts = DateTimeOffset.UtcNow })).AllowAnonymous();
 
 // Локальный вход (ADR-0007): POST /login проверяет логин/пароль и ставит cookie.
 // GET /login отдаёт форму (Blazor-страница Login.razor, анонимна).
 if (useEfStore && requireAuth)
 {
-    app.MapPost("/auth/login", async (HttpContext ctx, ILocalAuthService auth) =>
+    app.MapPost("/auth/login", async (HttpContext ctx, ILocalAuthService auth, IAuditLog audit) =>
     {
         var form = await ctx.Request.ReadFormAsync();
         var user = form["user"].ToString();
@@ -298,9 +345,14 @@ if (useEfStore && requireAuth)
         var returnUrl = form["returnUrl"].ToString();
         if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/')) returnUrl = "/";
 
+        var host = ctx.Connection.RemoteIpAddress?.ToString() ?? "";
         var local = await auth.ValidateAsync(user, pass);
         if (local is null)
+        {
+            // неуспешный вход тоже в журнал (Technician Logon Report)
+            await AdManager.Web.LogonAudit.WriteAsync(audit, user, user, host, "Password", success: false, "Invalid user name or password");
             return Results.Redirect("/login?error=1&returnUrl=" + Uri.EscapeDataString(returnUrl));
+        }
 
         var claims = new List<System.Security.Claims.Claim>
         {
@@ -311,6 +363,7 @@ if (useEfStore && requireAuth)
         var identity = new System.Security.Claims.ClaimsIdentity(claims, "AdmgrCookie");
         var principal = new System.Security.Claims.ClaimsPrincipal(identity);
         await ctx.SignInAsync("AdmgrCookie", principal);
+        await AdManager.Web.LogonAudit.WriteAsync(audit, local.Sid, local.UserName, host, "Password", success: true, "Success");
         return Results.Redirect(returnUrl);
     }).AllowAnonymous().DisableAntiforgery();
 
