@@ -82,13 +82,28 @@
             }
             else if (Section == "Reports")
             {
-                <div class="treegroup">Reports</div>
-                <a class="treeitem" href="reports?r=all">All users</a>
-                <a class="treeitem" href="reports?r=disabled">Disabled users</a>
-                <a class="treeitem" href="reports?r=locked">Locked-out users</a>
-                <a class="treeitem" href="reports?r=noemail">Users without email</a>
-                <a class="treeitem" href="reports?r=nomanager">Users without manager</a>
-                <a class="treeitem" href="reports?r=pne">Password never expires</a>
+                <div class="treegroup">User Reports</div>
+                <a class="treeitem" href="reports?r=user.all">All Users</a>
+                <a class="treeitem" href="reports?r=user.empty-attrs">Users With Empty Attributes</a>
+                <a class="treeitem" href="reports?r=user.no-manager">Users Without Managers</a>
+                <a class="treeitem" href="reports?r=user.recently-created">Recently Created Users</a>
+                <a class="treeitem" href="reports?r=user.recently-modified">Recently Modified Users</a>
+                <a class="treeitem" href="reports?r=user.disabled">Disabled Users</a>
+                <a class="treeitem" href="reports?r=user.locked">Locked-out Users</a>
+                <a class="treeitem" href="reports?r=user.expired">Account Expired Users</a>
+                <a class="treeitem" href="reports?r=user.never-expires">Account Never Expires Users</a>
+                <div class="treegroup">Password Reports</div>
+                <a class="treeitem" href="reports?r=pwd.never-expires">Password Never Expires</a>
+                <a class="treeitem" href="reports?r=pwd.soon-expire">Soon-To-Expire Passwords</a>
+                <a class="treeitem" href="reports?r=pwd.expired">Password Expired Users</a>
+                <a class="treeitem" href="reports?r=pwd.recently-changed">Recently Changed Passwords</a>
+                <div class="treegroup">Group Reports</div>
+                <a class="treeitem" href="reports?r=group.all">All Groups</a>
+                <a class="treeitem" href="reports?r=group.empty">Empty Groups</a>
+                <div class="treegroup">Contact &amp; OU Reports</div>
+                <a class="treeitem" href="reports?r=contact.all">All Contacts</a>
+                <a class="treeitem" href="reports?r=ou.all">All OUs</a>
+                <a class="treeitem" href="reports?r=ou.empty">Empty OUs</a>
                 <div class="treegroup">Logs</div>
                 <NavLink class="treeitem" href="audit">Audit log</NavLink>
             }

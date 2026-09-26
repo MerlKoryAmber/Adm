@@ -33,6 +33,9 @@ builder.Services.AddSingleton<IOperationalCredentialProvider>(sp =>
         sp.GetService<ISettingsStore>()));
 builder.Services.AddScoped<IAdService, AdService>();
 builder.Services.AddScoped<IAdDirectory, AdDirectory>();
+// Движок отчётов (эталон ADManager Plus): единая точка для UI и автоматизаций.
+builder.Services.AddSingleton(sp => new UiBaseDn(sp.GetRequiredService<UiOptions>().BaseDn));
+builder.Services.AddScoped<IReportService, ReportService>();
 // Кэш дерева OU (singleton) + фоновое обновление раз в час. Держит полное дерево,
 // фильтрует системные контейнеры (Domain Controllers и т.п.).
 builder.Services.AddSingleton<IOuTreeProvider>(sp =>
