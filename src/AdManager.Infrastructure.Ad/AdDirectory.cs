@@ -125,10 +125,17 @@ public sealed class AdDirectory : IAdDirectory
                     de.RefreshCache();
                     var uac = de.Properties["userAccountControl"].Count > 0 ? (int)de.Properties["userAccountControl"][0]! : 0;
                     var lockout = de.Properties["lockoutTime"].Count > 0 ? Convert.ToInt64(de.Properties["lockoutTime"][0]) : 0;
+                    // Имя для UI: displayName → name → RDN. Никогда не полный DN
+                    // (в GUI DN не показываем; в AD имена уникальны — RDN достаточно).
+                    var sam = de.Properties["sAMAccountName"].Count > 0 ? de.Properties["sAMAccountName"][0]!.ToString()! : "";
+                    var displayName =
+                        de.Properties["displayName"].Count > 0 ? de.Properties["displayName"][0]!.ToString()! :
+                        de.Properties["name"].Count > 0 ? de.Properties["name"][0]!.ToString()! :
+                        (!string.IsNullOrEmpty(sam) ? sam : Rdn(memberDn));
                     list.Add(new AdUserSummary(
                         memberDn,
-                        de.Properties["sAMAccountName"].Count > 0 ? de.Properties["sAMAccountName"][0]!.ToString()! : "",
-                        de.Properties["displayName"].Count > 0 ? de.Properties["displayName"][0]!.ToString()! : memberDn,
+                        sam,
+                        displayName,
                         de.Properties["userPrincipalName"].Count > 0 ? de.Properties["userPrincipalName"][0]?.ToString() : null,
                         de.Properties["mail"].Count > 0 ? de.Properties["mail"][0]?.ToString() : null,
                         (uac & UF_ACCOUNTDISABLE) == 0,
