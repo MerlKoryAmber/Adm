@@ -1,0 +1,179 @@
+@page "/domains"
+@inject IDomainRegistry Registry
+@inject AdConnectionOptions ActiveConn
+@using AdManager.Application
+
+<PageTitle>Domains — admanager</PageTitle>
+<h1>Managed domains</h1>
+<RequireAccess Permissions="new[] { Permission.ManageSettings }">
+<p class="subtitle">Active Directory domains this panel manages. Each domain has its own domain controller, search base and operational identity (never Domain Admin). The default domain is the one currently used; switching applies after an app pool recycle (multi-domain switch — planned).</p>
+
+@if (banner is not null) { <div class="banner @(ok ? "ok" : "err")">@banner</div> }
+
+@if (list is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="gridpanel">
+        <div style="overflow-x:auto">
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Domain (FQDN)</th><th>Domain controller</th><th>Search base</th><th>Identity</th><th>Default</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in list)
+                    {
+                        var dd = d;
+                        <tr>
+                            <td>@dd.Name</td>
+                            <td>@dd.DomainFqdn</td>
+                            <td>@dd.DcServer</td>
+                            <td>@dd.EffectiveBaseDn</td>
+                            <td>@(dd.IsStoredCredential ? $"Stored: {dd.CredentialUser}" : "gMSA")</td>
+                            <td>@(dd.IsDefault ? "★ default" : "")</td>
+                            <td>
+                                <button @onclick="() => Edit(dd)">Edit</button>
+                                @if (!dd.IsDefault) { <button @onclick="() => MakeDefault(dd.Id)">Make default</button> }
+                                @if (confirmDel == dd.Id)
+                                {
+                                    <button class="danger" @onclick="() => Delete(dd.Id)">Confirm delete</button>
+                                    <button class="linkbtn" @onclick="() => confirmDel = null">cancel</button>
+                                }
+                                else { <button class="danger" @onclick="() => confirmDel = dd.Id">Delete</button> }
+                            </td>
+                        </tr>
+                    }
+                    @if (list.Count == 0) { <tr><td colspan="7" class="muted" style="padding:12px">No domains yet. Add one below. Until then the panel uses the bootstrap configuration (@ActiveConn.Domain).</td></tr> }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-top:16px">
+        <h3>@(editing.Id == Guid.Empty ? "Add domain" : "Edit domain")</h3>
+
+        <label>Display name *</label>
+        <input type="text" @bind="editing.Name" placeholder="HQ / merl.loc" />
+        <div class="hint">Shown in the domain selector.</div>
+
+        <div class="grid2">
+            <div>
+                <label>Domain FQDN *</label>
+                <input type="text" @bind="editing.DomainFqdn" placeholder="merl.loc" />
+                <div class="hint">Fully-qualified domain name.</div>
+            </div>
+            <div>
+                <label>Domain controller (FQDN/IP) *</label>
+                <input type="text" @bind="editing.DcServer" placeholder="dc01.merl.loc" />
+                <div class="hint">The DC this panel connects to.</div>
+            </div>
+        </div>
+
+        <label>Search base (DN)</label>
+        <input type="text" @bind="editing.BaseDn" placeholder="leave empty to derive from FQDN" />
+        <div class="hint">Base of the directory search. Empty → derived from FQDN.</div>
+
+        <label>Operational identity</label>
+        <select @bind="editing.CredentialMode">
+            <option value="gMSA">gMSA (managed service account — no password)</option>
+            <option value="StoredCredential">Stored credential (domain account with password)</option>
+        </select>
+        <div class="hint">Account used for operations in this domain. Never Domain Admin — delegate the minimum rights.</div>
+
+        @if (editing.CredentialMode == "StoredCredential")
+        {
+            <div class="grid2">
+                <div>
+                    <label>User</label>
+                    <input type="text" @bind="editing.CredentialUser" placeholder="svc-admanager" />
+                </div>
+                <div>
+                    <label>Account domain</label>
+                    <input type="text" @bind="editing.CredentialDomain" placeholder="merl.loc" />
+                </div>
+            </div>
+            <label>Password</label>
+            <input type="password" @bind="editing.CredentialPassword" placeholder="@(editing.Id == Guid.Empty ? "" : "unchanged if left blank")" />
+            <div class="hint">Encrypted at rest (envelope, AES-256-GCM).</div>
+        }
+
+        <label>Exchange connection URI (optional)</label>
+        <input type="text" @bind="editing.ExchangeConnectionUri" placeholder="http://exch.merl.loc/PowerShell/" />
+
+        <div class="checkbox" style="margin-top:8px"><input type="checkbox" id="en" @bind="editing.Enabled" /><label for="en">Enabled</label></div>
+        <div class="checkbox"><input type="checkbox" id="def" @bind="editing.IsDefault" /><label for="def">Default (active) domain</label></div>
+
+        <div class="btnrow" style="margin-top:12px">
+            <button class="primary" @onclick="Save" disabled="@(!Valid)">Save domain</button>
+            @if (editing.Id != Guid.Empty) { <button @onclick="NewForm">Cancel edit</button> }
+        </div>
+    </div>
+}
+</RequireAccess>
+
+@code {
+    private List<ManagedDomain>? list;
+    private ManagedDomain editing = new();
+    private Guid? confirmDel;
+    private string? banner; private bool ok;
+    // храним, был ли пароль скрыт при редактировании (пустой ввод = не менять)
+    private bool editingHadPassword;
+
+    private bool Valid => !string.IsNullOrWhiteSpace(editing.Name)
+        && !string.IsNullOrWhiteSpace(editing.DomainFqdn)
+        && !string.IsNullOrWhiteSpace(editing.DcServer);
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload() => list = (await Registry.ListAsync()).OrderByDescending(d => d.IsDefault).ThenBy(d => d.Name).ToList();
+
+    private void NewForm() { editing = new ManagedDomain(); editingHadPassword = false; }
+
+    private void Edit(ManagedDomain d)
+    {
+        // копия для правки (не мутируем список до Save); пароль не показываем
+        editing = new ManagedDomain
+        {
+            Id = d.Id, Name = d.Name, DcServer = d.DcServer, DomainFqdn = d.DomainFqdn, BaseDn = d.BaseDn,
+            CredentialMode = d.CredentialMode, CredentialUser = d.CredentialUser, CredentialDomain = d.CredentialDomain,
+            CredentialPassword = "", ExchangeConnectionUri = d.ExchangeConnectionUri, Enabled = d.Enabled, IsDefault = d.IsDefault,
+        };
+        editingHadPassword = !string.IsNullOrEmpty(d.CredentialPassword);
+        confirmDel = null;
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            // при редактировании пустой пароль = не менять: подтягиваем прежний
+            if (editing.Id != Guid.Empty && string.IsNullOrEmpty(editing.CredentialPassword) && editingHadPassword)
+            {
+                var existing = await Registry.GetAsync(editing.Id);
+                if (existing is not null) editing.CredentialPassword = existing.CredentialPassword;
+            }
+            await Registry.SaveAsync(editing);
+            ok = true; banner = $"Domain '{editing.Name}' saved. Restart the app pool to apply if it is the active domain.";
+            NewForm();
+            await Reload();
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+    }
+
+    private async Task MakeDefault(Guid id)
+    {
+        await Registry.SetDefaultAsync(id);
+        ok = true; banner = "Default domain changed. Restart the app pool to apply.";
+        await Reload();
+    }
+
+    private async Task Delete(Guid id)
+    {
+        await Registry.DeleteAsync(id);
+        confirmDel = null; ok = true; banner = "Domain deleted.";
+        if (editing.Id == id) NewForm();
+        await Reload();
+    }
+}

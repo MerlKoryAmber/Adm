@@ -138,6 +138,7 @@
                 @if (access.Can(Permission.ManageSettings))
                 {
                     <div class="treegroup">Settings</div>
+                    <NavLink class="treeitem" href="domains">Domains</NavLink>
                     <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">Email &amp; HTTPS</NavLink>
                     <a class="treeitem" href="settings#exchange">Exchange cache</a>
                     <a class="treeitem" href="settings#identity">Operational identity</a>
@@ -166,6 +167,7 @@
             if (p.StartsWith("automation")) return "Automation";
             if (p.StartsWith("password-expiry")) return "PasswordExpiry";
             if (p.StartsWith("settings")) return "Administration";
+            if (p.StartsWith("domains")) return "Administration";
             if (p.StartsWith("administration")) return "Administration";
             return "Management";
         }

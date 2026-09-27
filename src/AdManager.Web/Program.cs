@@ -21,27 +21,46 @@ DotEnv.Overlay(builder);
 var adOpt = builder.Configuration.GetSection("Ad").Get<AdConnectionOptions>() ?? new AdConnectionOptions();
 var opOpt = builder.Configuration.GetSection("Operational").Get<OperationalCredentialOptions>() ?? new OperationalCredentialOptions();
 var uiOpt = builder.Configuration.GetSection("Ui").Get<UiOptions>() ?? new UiOptions();
-builder.Services.AddSingleton(adOpt);
 builder.Services.AddSingleton(opOpt);
 builder.Services.AddSingleton(uiOpt);
 
+// Активный домен (Фаза 1 мульти-домена): берём из реестра (IDomainRegistry); если реестр
+// пуст — bootstrap из конфига Ad:*/.env. Значение фиксируется при старте (singleton);
+// смена активного домена в UI применяется после recycle пула (переключатель — Фаза 2).
+// Активный домен из реестра, либо null если реестр пуст (тогда — bootstrap из конфига).
+ManagedDomain? ActiveFromRegistry(IServiceProvider sp)
+{
+    try { return sp.GetRequiredService<IDomainRegistry>().GetActiveAsync().GetAwaiter().GetResult(); }
+    catch { return null; }
+}
+AdConnectionOptions ActiveConnection(IServiceProvider sp)
+    => ActiveFromRegistry(sp)?.ToConnectionOptions() ?? adOpt;
+
+// AdConnectionOptions активного домена (реестр → домен; пусто → конфиг Ad:*/.env).
+builder.Services.AddSingleton(ActiveConnection);
+
 // Инфраструктура.
-// Op-identity: хранимая УЗ читается из БД (settings-стор), .env — bootstrap-fallback (ADR-0006).
+// Op-identity активного домена: реестр → УЗ домена; если реестр пуст — прежняя логика
+// (БД settings-стор + .env fallback), чтобы существующая лаба/bootstrap не сломались.
 builder.Services.AddSingleton<IOperationalCredentialProvider>(sp =>
-    new ConfiguredCredentialProvider(
+{
+    var active = ActiveFromRegistry(sp);
+    if (active is not null) return new DomainCredentialProvider(active);
+    return new ConfiguredCredentialProvider(
         sp.GetRequiredService<OperationalCredentialOptions>(),
-        sp.GetService<ISettingsStore>()));
+        sp.GetService<ISettingsStore>());
+});
 builder.Services.AddScoped<IAdService, AdService>();
 builder.Services.AddScoped<IAdDirectory, AdDirectory>();
 // Движок отчётов (эталон ADManager Plus): единая точка для UI и автоматизаций.
-builder.Services.AddSingleton(sp => new UiBaseDn(sp.GetRequiredService<UiOptions>().BaseDn));
+builder.Services.AddSingleton(sp => new UiBaseDn(sp.GetRequiredService<AdConnectionOptions>().BaseDn ?? sp.GetRequiredService<UiOptions>().BaseDn));
 builder.Services.AddScoped<IReportService, ReportService>();
 // Кэш дерева OU (singleton) + фоновое обновление раз в час. Держит полное дерево,
 // фильтрует системные контейнеры (Domain Controllers и т.п.).
 builder.Services.AddSingleton<IOuTreeProvider>(sp =>
     new OuTreeCache(
         sp.GetRequiredService<IServiceScopeFactory>(),
-        sp.GetRequiredService<UiOptions>().BaseDn,
+        sp.GetRequiredService<AdConnectionOptions>().BaseDn ?? sp.GetRequiredService<UiOptions>().BaseDn,
         sp.GetRequiredService<ILoggerFactory>().CreateLogger<OuTreeCache>()));
 builder.Services.AddHostedService<OuTreeRefresher>();
 // Кэш данных Exchange (singleton): список почтовых баз. Обновляется по расписанию
@@ -193,6 +212,17 @@ if (useEfStore)
     builder.Services.AddSingleton<ICustomAttributeStore, EfCustomAttributeStore>();
 else
     builder.Services.AddSingleton<ICustomAttributeStore>(new FileCustomAttributeStore(caPath));
+
+// Реестр управляемых доменов (мульти-домен, Фаза 1). Ef — с шифрованием пароля УЗ (ADR-0006).
+var domReg = builder.Configuration["Domains:FilePath"]
+             ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "domains.json");
+if (useEfStore)
+    builder.Services.AddSingleton<IDomainRegistry>(sp =>
+        new EncryptedDomainRegistry(
+            new EfDomainRegistry(sp.GetRequiredService<IDbContextFactory<AdManagerDbContext>>()),
+            sp.GetRequiredService<ISecretProtector>()));
+else
+    builder.Services.AddSingleton<IDomainRegistry>(new FileDomainRegistry(domReg));
 
 builder.Services.AddSingleton<AutomationScheduler>();
 builder.Services.AddSingleton<IAutomationScheduler>(sp => sp.GetRequiredService<AutomationScheduler>());
