@@ -74,10 +74,10 @@
                     <NavLink class="treeitem" href="contacts" Match="NavLinkMatch.All">Modify contacts</NavLink>
                     @if (access.Can(Permission.CreateContact)) { <NavLink class="treeitem" href="contacts/create">Create contact</NavLink> }
                 }
-                @if (CanExchange)
+                @if (access.Can(Permission.ManageDistribution))
                 {
                     <div class="treegroup">Exchange</div>
-                    <NavLink class="treeitem" href="exchange">Mailboxes &amp; Groups</NavLink>
+                    <NavLink class="treeitem" href="exchange">Distribution groups</NavLink>
                 }
             }
             else if (Section == "Reports")
@@ -195,7 +195,7 @@
     private string ManagementHome =>
         CanUsers ? "users" : CanGroups ? "groups" : CanComputers ? "computers" :
         CanOus ? "ous" : CanContacts ? "contacts" : access.Can(Permission.ManageGpoLinks) ? "gpo" :
-        CanExchange ? "exchange" : "users";
+        access.Can(Permission.ManageDistribution) ? "exchange" : "users";
 
     private string? accessLoadedFor;
 
