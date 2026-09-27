@@ -159,6 +159,8 @@ a { color: var(--link); }
 .fieldrow { display: flex; align-items: center; gap: 10px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
 .fieldrow .fname { font-weight: 500; }
 .fieldrow .fkey { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+/* распорка: кнопка (Remove и т.п.) прижимается к правому краю строки — ровная колонка */
+.fieldrow .grow { flex: 1; }
 
 /* Logon hours grid (7×24) */
 table.lh { border-collapse: collapse; margin: 6px 0; }
