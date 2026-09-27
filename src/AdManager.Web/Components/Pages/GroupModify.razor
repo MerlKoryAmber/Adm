@@ -22,13 +22,7 @@ else
 {
     <div class="panel" style="max-width:680px">
         <label>Add member</label>
-        <select @bind="addDn">
-            <option value="">— select a user —</option>
-            @foreach (var u in allUsers ?? Enumerable.Empty<AdUserSummary>())
-            {
-                <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
-            }
-        </select>
+        <PrincipalPicker Value="@addDn" ValueChanged="v => addDn = v" ObjectClasses="@(new[] { "user", "group", "computer", "contact" })" Placeholder="find user / group by name…" />
         <div class="btnrow"><button class="primary" @onclick="Add" disabled="@string.IsNullOrEmpty(addDn)">Add to group</button></div>
 
         <h3 style="margin-top:14px">Members</h3>
@@ -96,8 +90,6 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool loaded;
-    private List<AdOuNode>? ous;
-    private List<AdUserSummary>? allUsers;
     private List<AdUserSummary>? members;
     private string gName = "", gSam = "";
     private string addDn = "", renameTo = "", moveTo = "";
@@ -119,9 +111,7 @@ else
             gInfo = det.Attributes.GetValueOrDefault("info") ?? "";
             gManagedBy = det.Attributes.GetValueOrDefault("managedBy") ?? "";
             managedByName = Rdn(gManagedBy);
-            ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
             moveTo = ParentOf(Dn);
-            allUsers = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList();
             members = (await Dir.ListGroupMembersAsync(Dn)).ToList();
             loaded = true;
         }

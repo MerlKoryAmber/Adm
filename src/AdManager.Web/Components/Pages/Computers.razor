@@ -14,8 +14,8 @@
 }
 
 <div class="toolbar">
-    <input class="searchbox" type="text" placeholder="Search name / OS…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
-    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
+    <input class="searchbox" type="text" placeholder="Search name / OS…" @bind="search" @bind:event="oninput" @bind:after="ReloadFirst" />
+    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="ReloadFirst" /> Disabled only</label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("computers/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
@@ -28,14 +28,9 @@
         <button @onclick="() => BulkEnabled(true)">Enable</button>
         <button @onclick="() => BulkEnabled(false)">Disable</button>
         <button @onclick="BulkReset">Reset account</button>
-        <select @bind="bulkMoveTo" style="max-width:180px">
-            <option value="">move to…</option>
-            <option value="@Ui.BaseDn">(domain root)</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
+        <span style="width:220px;display:inline-block">
+            <OuPicker Value="@bulkMoveTo" ValueChanged="v => bulkMoveTo = v" Placeholder="move to…" />
+        </span>
         <button @onclick="BulkMove" disabled="@string.IsNullOrEmpty(bulkMoveTo)">Move</button>
         @if (!confirmBulkDelete) { <button class="danger" @onclick="() => confirmBulkDelete = true">Delete…</button> }
         else
@@ -53,11 +48,8 @@
 }
 else
 {
-    var filtered = Filtered();
-    var total = filtered.Count;
+    var pageItems = items;
     var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
-    if (page >= pages) page = pages - 1;
-    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
 
     <div class="gridpanel">
         <div style="overflow-x:auto">
@@ -80,6 +72,7 @@ else
                             <td><button @onclick="() => Modify(cc)">Modify</button></td>
                         </tr>
                     }
+                    @if (pageItems.Count == 0) { <tr><td colspan="5" class="muted" style="padding:12px">No computers match.</td></tr> }
                 </tbody>
             </table>
         </div>
@@ -87,11 +80,11 @@ else
 
     <div class="pager">
         <span>@total computer(s)</span>
-        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
-        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <button @onclick="() => Go(0)" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => Go(page - 1)" disabled="@(page == 0)">‹ Prev</button>
         <span>Page @(page + 1) / @pages</span>
-        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
-        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+        <button @onclick="() => Go(page + 1)" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => Go(pages - 1)" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
 </RequireAccess>
@@ -100,41 +93,32 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private const int PageSize = 50;
-    private List<AdOuNode>? ous;
-    private List<AdComputerSummary>? items;
+    private List<AdComputerSummary>? items;   // текущая страница
+    private int total;
     private readonly HashSet<string> selected = new();
     private string search = "", bulkMoveTo = "";
     private bool onlyDisabled;
     private int page;
     private string? banner; private bool ok; private bool confirmBulkDelete;
 
-    protected override async Task OnInitializedAsync()
-    {
-        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
-        await Load();
-    }
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task ReloadFirst() { page = 0; await Load(); }
+    private async Task Go(int p) { page = Math.Max(0, p); await Load(); }
 
     private async Task Load()
     {
-        try { items = (await Dir.ListComputersAsync(Ui.BaseDn, subtree: true)).ToList(); selected.Clear(); confirmBulkDelete = false; page = 0; }
-        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
+        try
+        {
+            var res = await Dir.ListComputersPagedAsync(Ui.BaseDn, subtree: true, search, onlyDisabled, page * PageSize, PageSize);
+            items = res.Items.ToList(); total = res.Total;
+            var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+            if (page >= pages) { page = pages - 1; if (page < 0) page = 0; }
+        }
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; items = new(); total = 0; }
     }
 
     private void Modify(AdComputerSummary c) => Nav.NavigateTo($"computers/modify?dn={Uri.EscapeDataString(c.Dn)}");
-
-    private List<AdComputerSummary> Filtered()
-    {
-        var q = items!.AsEnumerable();
-        if (onlyDisabled) q = q.Where(c => !c.Enabled);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var t = search.Trim();
-            q = q.Where(c =>
-                (c.Name?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (c.OperatingSystem?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
-        }
-        return q.ToList();
-    }
 
     private bool AllOnPageSelected(List<AdComputerSummary> pageItems) => pageItems.Count > 0 && pageItems.All(c => selected.Contains(c.Dn));
     private void TogglePage(List<AdComputerSummary> pageItems, ChangeEventArgs e)
@@ -184,6 +168,4 @@ else
         var p = AuthState is null ? null : (await AuthState).User;
         return CurrentUser.From(p);
     }
-
-    private static string Indent(int d) => new string(' ', d * 3);
 }

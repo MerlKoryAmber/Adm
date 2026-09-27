@@ -14,10 +14,10 @@
 }
 
 <div class="toolbar">
-    <input class="searchbox" type="text" placeholder="Search name / account / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
-    <label class="chkinline"><input type="checkbox" @bind="onlyLocked" @bind:after="() => page = 0" /> Locked only</label>
-    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="() => page = 0" /> Disabled only</label>
-    <label class="chkinline"><input type="checkbox" @bind="hideDisabled" @bind:after="() => page = 0" /> Hide disabled</label>
+    <input class="searchbox" type="text" placeholder="Search name / account / email…" @bind="search" @bind:event="oninput" @bind:after="ReloadFirst" />
+    <label class="chkinline"><input type="checkbox" @bind="onlyLocked" @bind:after="ReloadFirst" /> Locked only</label>
+    <label class="chkinline"><input type="checkbox" @bind="onlyDisabled" @bind:after="ReloadFirst" /> Disabled only</label>
+    <label class="chkinline"><input type="checkbox" @bind="hideDisabled" @bind:after="ReloadFirst" /> Hide disabled</label>
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("users/create")'>+ Create</button>
     <button @onclick='() => Nav.NavigateTo("users/bulk")'>Bulk CSV</button>
@@ -53,11 +53,8 @@
 }
 else
 {
-    var filtered = Filtered();
-    var total = filtered.Count;
+    var pageItems = users;
     var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
-    if (page >= pages) page = pages - 1;
-    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
 
     <div class="gridpanel">
         <div style="overflow-x:auto">
@@ -83,6 +80,7 @@ else
                             <td><button @onclick="() => Modify(u)">Modify</button></td>
                         </tr>
                     }
+                    @if (pageItems.Count == 0) { <tr><td colspan="6" class="muted" style="padding:12px">No users match.</td></tr> }
                 </tbody>
             </table>
         </div>
@@ -90,11 +88,11 @@ else
 
     <div class="pager">
         <span>@total user(s)</span>
-        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
-        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <button @onclick="() => Go(0)" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => Go(page - 1)" disabled="@(page == 0)">‹ Prev</button>
         <span>Page @(page + 1) / @pages</span>
-        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
-        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+        <button @onclick="() => Go(page + 1)" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => Go(pages - 1)" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
 </RequireAccess>
@@ -103,8 +101,8 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private const int PageSize = 50;
-    private List<AdOuNode>? ous;
-    private List<AdUserSummary>? users;
+    private List<AdUserSummary>? users;   // текущая страница (серверная пагинация)
+    private int total;                     // всего совпадений (VLV ApproximateTotal)
     private readonly HashSet<string> selected = new();
     private string search = "", bulkPwd = "", bulkMoveTo = "";
     private bool onlyLocked, onlyDisabled, hideDisabled;
@@ -113,34 +111,25 @@ else
 
     private enum BulkOp { Enable, Disable, Unlock, Delete }
 
-    protected override async Task OnInitializedAsync()
-    {
-        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList(); // для bulk «move to…»
-        await Load();
-    }
+    protected override async Task OnInitializedAsync() => await Load();
+
+    // Сброс на первую страницу (для search/фильтров через @bind:after).
+    private async Task ReloadFirst() { page = 0; await Load(); }
+
+    private async Task Go(int p) { page = Math.Max(0, p); await Load(); }
 
     private async Task Load()
     {
-        try { users = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList(); page = 0; }
-        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
-    }
-
-    private List<AdUserSummary> Filtered()
-    {
-        var q = users!.AsEnumerable();
-        if (onlyLocked) q = q.Where(u => u.LockedOut);
-        if (onlyDisabled) q = q.Where(u => !u.Enabled);
-        if (hideDisabled) q = q.Where(u => u.Enabled);
-        if (!string.IsNullOrWhiteSpace(search))
+        try
         {
-            var t = search.Trim();
-            q = q.Where(u =>
-                (u.DisplayName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (u.SamAccountName?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (u.Upn?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (u.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+            var filter = new UserListFilter(search, onlyLocked, onlyDisabled, hideDisabled);
+            var res = await Dir.ListUsersPagedAsync(Ui.BaseDn, subtree: true, filter, page * PageSize, PageSize);
+            users = res.Items.ToList();
+            total = res.Total;
+            var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+            if (page >= pages) { page = pages - 1; if (page < 0) page = 0; }
         }
-        return q.ToList();
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; users = new(); total = 0; }
     }
 
     private async Task<TechnicianContext> Actor()
@@ -198,6 +187,4 @@ else
         selected.Clear(); confirmBulkDelete = false;
         await Load();
     }
-
-    private static string Indent(int d) => new string(' ', d * 3);
 }

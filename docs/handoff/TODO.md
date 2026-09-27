@@ -14,7 +14,7 @@
 |---|-------|-------------|--------|------|
 | 1 | Тест давал ложный «зелёный» без `.env` (skip как pass) | major | **исправлено** (SkippableFact) | — |
 | 2 | Окно неаудируемого изменения (аудит только post-op) | major | **исправлено** (двухфазный аудит Attempt/Result) | — |
-| 3 | `StoredCredential.Password` — открытый текст | major | открыт | DPAPI/DPAPI-NG при хранении; **до прода** |
+| 3 | `StoredCredential.Password` — открытый текст | major | **исправлено** | Шифруется envelope (ADR-0006) через `EncryptedSettingsStore` вместе с Smtp/Pfx-паролями; ключ — DpapiKeyring. Осталось до прода: перенос ключа на DPAPI-NG/секрет-хранилище на проде. |
 | 4 | Файловый аудит не защищён от правки (нет hash-chain) | minor | открыт | закрывается EF/SQL-аудитом + цепочка хэшей |
 | 5 | `CancellationToken` не учитывается в IO/`Invoke` | minor | открыт | при доработке AD/Exchange-адаптеров |
 | 6 | `Before/After` в аудите не заполняются | minor | открыт | зафиксировать `pwdLastSet`/mustChange, где осмысленно |
@@ -31,7 +31,7 @@
 | R3 | `proxyAddresses` (multi-valued) в текстовой раскладке схлопывался | major | **исправлено** (убран из FieldCatalog) |
 | R4 | Create: enabled без пароля → AD отклоняет | minor | **исправлено** (создаём disabled + предупреждение) |
 | R5 | ModifyUser.OnInitialized без try/catch | minor | **исправлено** |
-| R6 | Весь домен грузится в память на /users,/groups,/computers,/contacts,/exchange,/reports; дропдауны «Add member» рендерят всех юзеров | major | **открыт** — серверная LDAP-пагинация + autocomplete вместо клиентской |
+| R6 | Весь домен грузится в память на /users,/groups,/computers,/contacts,/exchange; дропдауны «Add member» рендерят всех юзеров | major | **исправлено** (VLV-пагинация в гридах + PrincipalPicker autocomplete; /reports — см. ниже) |
 | R7 | Файловые сторы: запись без temp+rename, нет межпроцессной блокировки (web-garden) | minor | открыт — закрывается EF/SQL-миграцией |
 | R8 | Modify без оптимистичной блокировки (два техника затирают друг друга) | minor | открыт |
 

@@ -62,6 +62,8 @@ public sealed class EncryptedSettingsStore : ISettingsStore
             Password = s.OperationalCredential.Password, Domain = s.OperationalCredential.Domain,
         },
         PasswordExpiry = s.PasswordExpiry,   // не секрет — ссылка ок
+        AuditRetentionDays = s.AuditRetentionDays,
+        ExchangeCache = s.ExchangeCache,     // не секрет — ссылка ок
         LastRunUtc = s.LastRunUtc,
         LastRunResult = s.LastRunResult,
     };

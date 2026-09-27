@@ -1,0 +1,113 @@
+@namespace AdManager.Web.Components.Shared
+@inject IAdDirectory Dir
+@inject UiOptions Ui
+@using AdManager.Application.Abstractions
+
+@* Autocomplete-выбор объекта AD (пользователь/группа/…): поиск по подстроке через
+   SearchAsync (серверный, SizeLimit) вместо загрузки всего домена в <select>.
+   Отдаёт выбранный DN (Value/ValueChanged) + читаемое имя. *@
+
+<div class="oupick">
+    @if (selectedName is { Length: > 0 })
+    {
+        <div class="oupick-field" style="cursor:default">
+            <span class="ouicon">@Icon</span>
+            <span class="grow">@selectedName</span>
+            <button type="button" class="linkbtn" @onclick="Clear">change</button>
+        </div>
+    }
+    else
+    {
+        <input type="text" class="searchbox" style="width:100%" placeholder="@Placeholder"
+               @bind="term" @bind:event="oninput" @bind:after="OnType" @onfocus="OnType" />
+        @if (open && results is not null)
+        {
+            <div class="dropdown-backdrop" @onclick="() => open = false"></div>
+            <div class="oupick-panel" style="max-height:280px;overflow:auto">
+                @if (searching) { <div class="outree-row"><span class="muted">Searching…</span></div> }
+                else if (results.Count == 0) { <div class="outree-row"><span class="muted">No matches.</span></div> }
+                else
+                {
+                    @foreach (var r in results)
+                    {
+                        var rr = r;
+                        <div class="outree-row" style="padding-left:8px" @onclick="() => Pick(rr)">
+                            <span class="ouicon">@ClassIcon(rr.ObjectClass)</span>
+                            <span class="outree-name">@rr.Name</span>
+                            @if (rr.SamAccountName is { Length: > 0 }) { <span class="fkey" style="margin-left:6px">@rr.SamAccountName</span> }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    /// <summary>Имя выбранного (для отображения без повторного запроса).</summary>
+    [Parameter] public string? SelectedName { get; set; }
+    [Parameter] public EventCallback<string?> SelectedNameChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "search user or group by name…";
+    [Parameter] public string Icon { get; set; } = "👤";
+    /// <summary>Фильтр по классам (напр. только "user"/"group"); null — любой.</summary>
+    [Parameter] public string[]? ObjectClasses { get; set; }
+
+    private string term = "";
+    private string? selectedName;
+    private bool open, searching;
+    private IReadOnlyList<AdSearchResult>? results;
+    private CancellationTokenSource? cts;
+
+    protected override void OnParametersSet() => selectedName = SelectedName;
+
+    private async Task OnType()
+    {
+        open = true;
+        var t = term.Trim();
+        if (t.Length < 2) { results = Array.Empty<AdSearchResult>(); return; }
+
+        cts?.Cancel();
+        cts = new CancellationTokenSource();
+        var ct = cts.Token;
+        searching = true;
+        try
+        {
+            await Task.Delay(200, ct);   // дебаунс
+            var all = await Dir.SearchAsync(Ui.BaseDn, t, ct);
+            if (ct.IsCancellationRequested) return;
+            results = ObjectClasses is { Length: > 0 }
+                ? all.Where(r => ObjectClasses.Contains(r.ObjectClass, StringComparer.OrdinalIgnoreCase)).ToList()
+                : all;
+        }
+        catch (OperationCanceledException) { return; }
+        catch { results = Array.Empty<AdSearchResult>(); }
+        finally { if (!ct.IsCancellationRequested) { searching = false; StateHasChanged(); } }
+    }
+
+    private async Task Pick(AdSearchResult r)
+    {
+        open = false;
+        selectedName = r.Name;
+        term = "";
+        await ValueChanged.InvokeAsync(r.Dn);
+        await SelectedNameChanged.InvokeAsync(r.Name);
+    }
+
+    private async Task Clear()
+    {
+        selectedName = null; term = ""; results = null; open = false;
+        await ValueChanged.InvokeAsync("");
+        await SelectedNameChanged.InvokeAsync(null);
+    }
+
+    private static string ClassIcon(string cls) => cls switch
+    {
+        "group" => "👥",
+        "computer" => "💻",
+        "organizationalUnit" => "🗀",
+        "contact" => "📇",
+        _ => "👤",
+    };
+}

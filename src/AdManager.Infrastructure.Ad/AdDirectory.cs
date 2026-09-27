@@ -374,6 +374,130 @@ public sealed class AdDirectory : IAdDirectory
         return string.Join("/", parts);
     }
 
+    // ---------- Серверная пагинация (VLV) ----------
+    // VLV (Virtual List View) отдаёт страницу [skip..skip+take) и приблизительный total
+    // прямо с контроллера домена — весь набор в память не тянется. Требует серверную
+    // сортировку (SortOption). Фильтрация — LDAP-фильтром на сервере.
+
+    public Task<PagedResult<AdUserSummary>> ListUsersPagedAsync(string ouDn, bool subtree, UserListFilter filter, int skip, int take, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            var conds = new List<string> { "(objectCategory=person)(objectClass=user)" };
+            if (!string.IsNullOrWhiteSpace(filter.Search))
+            {
+                var t = EscapeFilter(filter.Search.Trim());
+                conds.Add($"(|(cn=*{t}*)(sAMAccountName=*{t}*)(displayName=*{t}*)(mail=*{t}*))");
+            }
+            if (filter.LockedOnly) conds.Add("(lockoutTime>=1)");
+            if (filter.DisabledOnly) conds.Add("(userAccountControl:1.2.840.113556.1.4.803:=2)");
+            if (filter.HideDisabled) conds.Add("(!(userAccountControl:1.2.840.113556.1.4.803:=2))");
+            var ldap = "(&" + string.Concat(conds) + ")";
+
+            // Сортируем по sAMAccountName — он есть у любого user-объекта; сортировка по
+            // displayName исключила бы записи без него (Administrator/Guest/krbtgt) из VLV.
+            return PagedSearch(ouDn, subtree, ldap, "sAMAccountName", skip, take,
+                new[] { "distinguishedName", "sAMAccountName", "displayName", "userPrincipalName", "mail", "userAccountControl", "lockoutTime" },
+                r =>
+                {
+                    var uac = GetInt(r, "userAccountControl");
+                    var lockout = GetLong(r, "lockoutTime");
+                    return new AdUserSummary(
+                        Str(r, "distinguishedName"), Str(r, "sAMAccountName"), Str(r, "displayName"),
+                        StrOrNull(r, "userPrincipalName"), StrOrNull(r, "mail"),
+                        (uac & UF_ACCOUNTDISABLE) == 0, lockout > 0);
+                });
+        }, ct);
+
+    public Task<PagedResult<AdGroupSummary>> ListGroupsPagedAsync(string ouDn, bool subtree, string? search, int skip, int take, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            var ldap = "(objectClass=group)";
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var t = EscapeFilter(search.Trim());
+                ldap = $"(&(objectClass=group)(|(cn=*{t}*)(sAMAccountName=*{t}*)(name=*{t}*)))";
+            }
+            return PagedSearch(ouDn, subtree, ldap, "name", skip, take,
+                new[] { "distinguishedName", "sAMAccountName", "name" },
+                r => new AdGroupSummary(Str(r, "distinguishedName"), Str(r, "sAMAccountName"), Str(r, "name")));
+        }, ct);
+
+    public Task<PagedResult<AdComputerSummary>> ListComputersPagedAsync(string ouDn, bool subtree, string? search, bool disabledOnly, int skip, int take, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            var conds = new List<string> { "(objectClass=computer)" };
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var t = EscapeFilter(search.Trim());
+                conds.Add($"(|(cn=*{t}*)(sAMAccountName=*{t}*)(name=*{t}*))");
+            }
+            if (disabledOnly) conds.Add("(userAccountControl:1.2.840.113556.1.4.803:=2)");
+            var ldap = conds.Count == 1 ? conds[0] : "(&" + string.Concat(conds) + ")";
+            return PagedSearch(ouDn, subtree, ldap, "name", skip, take,
+                new[] { "distinguishedName", "sAMAccountName", "name", "userAccountControl", "operatingSystem" },
+                r => new AdComputerSummary(
+                    Str(r, "distinguishedName"), Str(r, "sAMAccountName"), Str(r, "name"),
+                    (GetInt(r, "userAccountControl") & UF_ACCOUNTDISABLE) == 0, StrOrNull(r, "operatingSystem")));
+        }, ct);
+
+    public Task<PagedResult<AdContactSummary>> ListContactsPagedAsync(string ouDn, bool subtree, string? search, int skip, int take, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            var ldap = "(&(objectClass=contact)(!(objectClass=user)))";
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var t = EscapeFilter(search.Trim());
+                ldap = $"(&(objectClass=contact)(!(objectClass=user))(|(cn=*{t}*)(displayName=*{t}*)(mail=*{t}*)))";
+            }
+            return PagedSearch(ouDn, subtree, ldap, "name", skip, take,
+                new[] { "distinguishedName", "name", "mail" },
+                r => new AdContactSummary(Str(r, "distinguishedName"), Str(r, "name"), StrOrNull(r, "mail")));
+        }, ct);
+
+    /// <summary>Общий VLV-поиск: страница [skip..skip+take) + приблизительный total.
+    /// Если VLV недоступен (напр. RODC/старый DC) — fallback на обычный FindAll со срезом.</summary>
+    private PagedResult<T> PagedSearch<T>(string ouDn, bool subtree, string ldapFilter, string sortBy,
+        int skip, int take, string[] props, Func<SearchResult, T> map)
+    {
+        if (take <= 0) take = 50;
+        if (skip < 0) skip = 0;
+        using var root = Bind(ouDn);
+        try
+        {
+            using var s = new DirectorySearcher(root)
+            {
+                Filter = ldapFilter,
+                SearchScope = subtree ? SearchScope.Subtree : SearchScope.OneLevel,
+                Sort = new SortOption(sortBy, SortDirection.Ascending),
+                VirtualListView = new DirectoryVirtualListView(0, take - 1, skip + 1),
+            };
+            foreach (var p in props) s.PropertiesToLoad.Add(p);
+
+            var items = new List<T>();
+            using var results = s.FindAll();
+            foreach (SearchResult r in results) items.Add(map(r));
+            var total = s.VirtualListView.ApproximateTotal;
+            return new PagedResult<T>(items, total);
+        }
+        catch
+        {
+            // Fallback: без VLV (сортировка/срез на клиенте). Дороже, но работает.
+            using var s = new DirectorySearcher(root)
+            {
+                Filter = ldapFilter,
+                SearchScope = subtree ? SearchScope.Subtree : SearchScope.OneLevel,
+                PageSize = 1000,
+            };
+            foreach (var p in props) s.PropertiesToLoad.Add(p);
+            var all = new List<SearchResult>();
+            using var results = s.FindAll();
+            foreach (SearchResult r in results) all.Add(r);
+            var total = all.Count;
+            var page = all.Skip(skip).Take(take).Select(map).ToList();
+            return new PagedResult<T>(page, total);
+        }
+    }
+
     private static string Str(SearchResult r, string p)
         => r.Properties.Contains(p) && r.Properties[p].Count > 0 ? r.Properties[p][0]!.ToString()! : "";
     private static string? StrOrNull(SearchResult r, string p)
