@@ -80,7 +80,7 @@ else
                                 <span class="badge @(u.Enabled ? "ok" : "off")">@(u.Enabled ? "Enabled" : "Disabled")</span>
                                 @if (u.LockedOut) { <span class="badge warn">Locked</span> }
                             </td>
-                            <td><button class="linkbtn" @onclick="() => Modify(u)">Modify ▸</button></td>
+                            <td><button @onclick="() => Modify(u)">Modify</button></td>
                         </tr>
                     }
                 </tbody>
