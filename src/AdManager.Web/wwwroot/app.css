@@ -208,6 +208,9 @@ table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); 
 .oupick-panel { position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
     border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
     box-shadow: 0 8px 24px rgba(0,0,0,.35); overflow: hidden; }
+/* Прозрачный backdrop под открытой выпадашкой: ловит клик снаружи и закрывает её.
+   fixed на весь экран, ниже панели (z-index 30), но выше остального контента. */
+.dropdown-backdrop { position: fixed; inset: 0; z-index: 20; background: transparent; }
 /* дерево внутри панели — компактное, со своим скроллом, без растягивания на экран */
 .oupick-panel .outree { max-height: 320px; min-height: 0; border: 0; border-radius: 0; margin: 0; }
 

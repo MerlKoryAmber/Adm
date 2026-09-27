@@ -15,6 +15,9 @@
     </button>
     @if (open)
     {
+        @* Невидимый backdrop на весь экран: клик в любом месте вне панели закрывает выпадашку
+           (как нативный <select>). *@
+        <div class="dropdown-backdrop" @onclick="() => open = false"></div>
         <div class="oupick-panel">
             @if (IncludeRoot)
             {
