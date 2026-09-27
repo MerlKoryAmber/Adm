@@ -353,6 +353,30 @@ if (requireAuth)
 {
     app.UseAuthentication();
 }
+
+// Blazor-плумбинг (_framework/blazor.web.js, _blazor хаб) отдают ЭНДПОИНТЫ фреймворка без
+// собственных authorize-метаданных, поэтому глобальный FallbackPolicy (RequireAuthenticatedUser)
+// под IIS/Negotiate челленджит их на /login → вместо JS приходит HTML, Blazor не стартует.
+// Помечаем такие эндпоинты AllowAnonymous ДО авторизации (страницы не затрагиваются).
+app.Use(async (ctx, next) =>
+{
+    var path = ctx.Request.Path;
+    if (path.StartsWithSegments("/_framework") || path.StartsWithSegments("/_blazor")
+        || path.StartsWithSegments("/_content"))
+    {
+        var ep = ctx.GetEndpoint();
+        if (ep is not null && ep.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAllowAnonymous>() is null)
+        {
+            var md = new List<object>(ep.Metadata) { new Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute() };
+            ctx.SetEndpoint(new Endpoint(
+                (ep as RouteEndpoint)?.RequestDelegate ?? ep.RequestDelegate,
+                new EndpointMetadataCollection(md),
+                ep.DisplayName));
+        }
+    }
+    await next();
+});
+
 app.UseAuthorization();
 app.UseAntiforgery();
 
@@ -422,6 +446,6 @@ if (useEfStore && requireAuth)
     });
 }
 
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+var razorComponents = app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();
