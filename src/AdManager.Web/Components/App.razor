@@ -11,5 +11,30 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
+    <script>
+        // Управляемый перезапуск панели (кнопка Apply changes на /domains):
+        // ждём, пока новый процесс поднимется (/health), затем сами перезагружаем страницу —
+        // без ручного F5 и без баннера "Could not reconnect".
+        window.admgrRestart = function () {
+            // спрятать штатный reconnect-UI Blazor, чтобы не мигал "Reload"
+            var style = document.createElement('style');
+            style.textContent = '#components-reconnect-modal{display:none!important}';
+            document.head.appendChild(style);
+
+            var started = Date.now();
+            var sawDown = false;
+            function poll() {
+                fetch('/health', { cache: 'no-store' })
+                    .then(function (r) {
+                        // сначала дожидаемся, что сервер УПАЛ (перезапускается), потом — что встал
+                        if (r.ok && sawDown) { location.reload(); return; }
+                        if (r.ok && Date.now() - started > 15000) { location.reload(); return; }
+                        setTimeout(poll, 700);
+                    })
+                    .catch(function () { sawDown = true; setTimeout(poll, 700); });
+            }
+            setTimeout(poll, 800);
+        };
+    </script>
 </body>
 </html>

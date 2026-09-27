@@ -1,8 +1,10 @@
 @page "/domains"
+@using Microsoft.JSInterop
 @inject IDomainRegistry Registry
 @inject AdConnectionOptions ActiveConn
 @inject Microsoft.Extensions.Hosting.IHostApplicationLifetime Lifetime
 @inject NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime JS
 @using AdManager.Application
 
 <PageTitle>Domains — admanager</PageTitle>
@@ -182,10 +184,12 @@ else
         restarting = true;
         banner = null;
         StateHasChanged();
-        // Дать UI отрисовать баннер и отдать ответ, затем остановить приложение.
-        // Под IIS inprocess ANCM автоматически поднимет процесс на следующем запросе,
-        // под Kestrel — служба/пул перезапустит. Прав на IIS не требуется.
-        _ = Task.Run(async () => { await Task.Delay(1200); Lifetime.StopApplication(); });
+        // Клиент начинает ждать перезапуск и сам перезагрузит страницу, когда сервер встанет
+        // (поллинг /health) — без ручного F5 и без баннера "Could not reconnect".
+        await JS.InvokeVoidAsync("admgrRestart");
+        // Останавливаем приложение: под IIS inprocess ANCM поднимет процесс на следующем
+        // запросе (поллинг /health его и разбудит). Прав на IIS не требуется.
+        _ = Task.Run(async () => { await Task.Delay(1000); Lifetime.StopApplication(); });
     }
 
     private async Task Delete(Guid id)
