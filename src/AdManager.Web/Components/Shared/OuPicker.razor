@@ -1,0 +1,61 @@
+@namespace AdManager.Web.Components.Shared
+@inject IOuTreeProvider OuTreeProvider
+@inject UiOptions Ui
+@using AdManager.Application.Abstractions
+
+@* Компактный выпадающий выбор OU на основе OuTree (кэш + фильтр системных контейнеров).
+   Заменяет плоский <select> целевого OU на всех формах Create/Move.
+   Value/ValueChanged — DN выбранного OU. IncludeRoot=true добавляет пункт (domain root). *@
+
+<div class="oupick">
+    <button type="button" class="oupick-field" @onclick="() => open = !open">
+        <span class="ouicon">🗀</span>
+        <span class="grow">@DisplayName</span>
+        <span class="outree-caret @(open ? "open" : null)">▶</span>
+    </button>
+    @if (open)
+    {
+        <div class="oupick-panel">
+            @if (IncludeRoot)
+            {
+                <div class="outree-row @(Value == Ui.BaseDn ? "selected" : null)" style="padding-left:6px" @onclick="() => Pick(Ui.BaseDn, RootLabel)">
+                    <span class="outree-caret empty"></span>
+                    <span class="ouicon">🗀</span>
+                    <span class="outree-name">@RootLabel</span>
+                </div>
+            }
+            <OuTree Selectable="false" SelectedDn="@Value" FullHeight="false" OnSelect="OnTreeSelect" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public bool IncludeRoot { get; set; } = true;
+    [Parameter] public string RootLabel { get; set; } = "(domain root)";
+    [Parameter] public string Placeholder { get; set; } = "(select OU)";
+
+    private bool open;
+    private Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tree = await OuTreeProvider.GetTreeAsync();
+        names = tree.ToDictionary(o => o.Dn, o => o.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string DisplayName =>
+        string.IsNullOrEmpty(Value) ? Placeholder
+        : (IncludeRoot && Value == Ui.BaseDn) ? RootLabel
+        : names.GetValueOrDefault(Value!, Placeholder);
+
+    private Task OnTreeSelect(AdOuNode n) => Pick(n.Dn, n.Name);
+
+    private async Task Pick(string dn, string name)
+    {
+        Value = dn;
+        open = false;
+        await ValueChanged.InvokeAsync(dn);
+    }
+}

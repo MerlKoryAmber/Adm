@@ -26,6 +26,11 @@
     </div>
     <label>Description</label>
     <textarea rows="2" @bind="tpl.Description" placeholder="What this layout is for."></textarea>
+    <div class="checkbox" style="margin-top:8px">
+        <input type="checkbox" id="incmbx" @bind="tpl.IncludeMailbox" />
+        <label for="incmbx">Include Exchange (mailbox) tab</label>
+    </div>
+    <div class="hint">Show the Exchange tab on this form: create a mailbox (with database + personal archive) on Create, or manage the mailbox on Modify. Requires the technician's role to grant the matching mailbox permissions.</div>
 </div>
 
 <h3 style="margin:18px 0 8px">Layout view</h3>

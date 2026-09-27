@@ -51,6 +51,48 @@ public sealed class ExchangeManagementService
     public Task<OperationResult> SetSendOnBehalfAsync(TechnicianContext actor, string identity, string trustee, bool add, CancellationToken ct = default)
         => Run(actor, Permission.ManageMailboxPermissions, identity, $"attempt: {(add ? "add" : "remove")} Send on Behalf for {trustee}", () => _ex.SetSendOnBehalfAsync(identity, trustee, add, ct), ct);
 
+    // --- Создание ящика с базой/архивом (Create user tab) ---
+    public Task<OperationResult> EnableMailboxAsync(TechnicianContext actor, string userDn, MailboxProvisioning p, CancellationToken ct = default)
+        => Run(actor, Permission.EnableMailbox, userDn, "attempt: enable mailbox", () => _ex.EnableMailboxAsync(userDn, p, ct), ct);
+
+    // --- Modify: email-адреса ---
+    public Task<OperationResult> SetEmailAddressesAsync(TechnicianContext actor, string identity, IReadOnlyList<string> addresses, string? primarySmtp, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxEmailAddresses, identity, "attempt: set email addresses", () => _ex.SetEmailAddressesAsync(identity, addresses, primarySmtp, ct), ct);
+
+    // --- Modify: переадресация ---
+    public Task<OperationResult> SetForwardingAsync(TechnicianContext actor, string identity, string? fwd, bool deliverAndForward, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxForwarding, identity, "attempt: set forwarding", () => _ex.SetForwardingAsync(identity, fwd, deliverAndForward, ct), ct);
+
+    // --- Modify: скрытие из адресной книги ---
+    public Task<OperationResult> SetHiddenFromAddressListsAsync(TechnicianContext actor, string identity, bool hidden, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxAddressBook, identity, $"attempt: {(hidden ? "hide" : "show")} in address book", () => _ex.SetHiddenFromAddressListsAsync(identity, hidden, ct), ct);
+
+    // --- Modify: персональный архив ---
+    public Task<OperationResult> SetArchiveAsync(TechnicianContext actor, string identity, bool enabled, string? archiveDatabase, CancellationToken ct = default)
+        => Run(actor, Permission.SetMailboxProperties, identity, $"attempt: {(enabled ? "enable" : "disable")} personal archive", () => _ex.SetArchiveAsync(identity, enabled, archiveDatabase, ct), ct);
+
+    // --- Modify: мобильные устройства ---
+    public Task<OperationResult> WipeMobileDeviceAsync(TechnicianContext actor, string mailboxDn, string deviceIdentity, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxMobile, mailboxDn, $"attempt: wipe mobile device {deviceIdentity}", () => _ex.WipeMobileDeviceAsync(deviceIdentity, ct), ct);
+
+    public Task<OperationResult> RemoveMobileDeviceAsync(TechnicianContext actor, string mailboxDn, string deviceIdentity, CancellationToken ct = default)
+        => Run(actor, Permission.ManageMailboxMobile, mailboxDn, $"attempt: remove mobile device {deviceIdentity}", () => _ex.RemoveMobileDeviceAsync(deviceIdentity, ct), ct);
+
+    // --- Чтение (для форм; проверка права + без аудита-намерения) ---
+    public async Task<MailboxInfo> GetMailboxInfoAsync(TechnicianContext actor, string identity, CancellationToken ct = default)
+    {
+        var d = await _rbac.AuthorizeAsync(actor, Permission.SetMailboxProperties, identity, ct);
+        if (!d.Allowed) return new MailboxInfo(false);
+        return await _ex.GetMailboxInfoAsync(identity, ct);
+    }
+
+    public async Task<IReadOnlyList<MobileDevice>> ListMobileDevicesAsync(TechnicianContext actor, string identity, CancellationToken ct = default)
+    {
+        var d = await _rbac.AuthorizeAsync(actor, Permission.ManageMailboxMobile, identity, ct);
+        if (!d.Allowed) return Array.Empty<MobileDevice>();
+        return await _ex.ListMobileDevicesAsync(identity, ct);
+    }
+
     private async Task<OperationResult> Run(TechnicianContext actor, Permission perm, string targetDn, string attemptMsg, Func<Task<OperationResult>> op, CancellationToken ct)
     {
         var decision = await _rbac.AuthorizeAsync(actor, perm, targetDn, ct);

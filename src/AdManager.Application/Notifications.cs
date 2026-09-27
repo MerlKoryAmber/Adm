@@ -67,6 +67,18 @@ public sealed class StoredCredentialSettings
                             && !string.IsNullOrEmpty(User);
 }
 
+/// <summary>Кэш данных Exchange: список почтовых баз и mailbox-атрибуты.
+/// Опрос Exchange дорогой (remote PowerShell), поэтому кэшируется по расписанию.</summary>
+public sealed class ExchangeCacheSettings
+{
+    /// <summary>Обновлять список почтовых баз каждые N часов (по умолчанию 24).</summary>
+    public int DatabaseListRefreshHours { get; set; } = 24;
+    /// <summary>Обновлять кэш mailbox-атрибутов (AD+Exchange) каждые N часов (по умолчанию 6).</summary>
+    public int MailboxAttributesRefreshHours { get; set; } = 6;
+    public DateTime? DatabasesLastRefreshUtc { get; set; }
+    public DateTime? MailboxAttributesLastRefreshUtc { get; set; }
+}
+
 /// <summary>Рантайм-настройки приложения (файловый стор).</summary>
 public sealed class AppSettings
 {
@@ -77,6 +89,8 @@ public sealed class AppSettings
     public StoredCredentialSettings OperationalCredential { get; set; } = new();
     /// <summary>Срок хранения логов аудита (дней). 0 = не чистить. По умолчанию 365.</summary>
     public int AuditRetentionDays { get; set; } = 365;
+    /// <summary>Расписание кэширования данных Exchange.</summary>
+    public ExchangeCacheSettings ExchangeCache { get; set; } = new();
     public DateTime? LastRunUtc { get; set; }
     public string? LastRunResult { get; set; }
 }
@@ -109,6 +123,16 @@ public interface ISettingsStore
 {
     Task<AppSettings> LoadAsync(CancellationToken ct = default);
     Task SaveAsync(AppSettings settings, CancellationToken ct = default);
+}
+
+/// <summary>Кэш списка почтовых баз Exchange (обновляется по расписанию + принудительно из Settings).</summary>
+public interface IExchangeDataCache
+{
+    /// <summary>Кэшированный список баз (пустой, пока не прогрет).</summary>
+    IReadOnlyList<Abstractions.MailboxDatabase> Databases { get; }
+    DateTime? DatabasesRefreshedUtc { get; }
+    /// <summary>Принудительно перечитать список баз из Exchange.</summary>
+    Task RefreshDatabasesAsync(CancellationToken ct = default);
 }
 
 public interface IEmailSender

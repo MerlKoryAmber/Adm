@@ -151,6 +151,8 @@ public sealed class UserTemplate
     public string Description { get; set; } = "";
     public string Kind { get; set; } = "Create"; // Create | Modify
     public List<TemplateTab> Tabs { get; set; } = new();
+    /// <summary>Показывать вкладку Exchange (создание/управление ящиком) на форме.</summary>
+    public bool IncludeMailbox { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedUtc { get; set; } = DateTime.UtcNow;
 }

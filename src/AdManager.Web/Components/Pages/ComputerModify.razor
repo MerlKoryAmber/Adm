@@ -57,13 +57,7 @@ else
         <div class="btnrow"><button @onclick="Rename" disabled="@string.IsNullOrWhiteSpace(renameTo)">Rename</button></div>
 
         <label>Move to OU</label>
-        <select @bind="moveTo">
-            <option value="@Ui.BaseDn">(domain root)</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
+        <OuPicker Value="@moveTo" ValueChanged="v => moveTo = v" />
         <div class="btnrow"><button @onclick="Move" disabled="@string.IsNullOrEmpty(moveTo)">Move</button></div>
 
         <hr />

@@ -15,13 +15,7 @@
 
 <div class="panel" style="max-width:660px">
     <label>Target OU</label>
-    <select @bind="ouDn">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
+    <OuPicker Value="@ouDn" ValueChanged="v => ouDn = v" />
     <div class="hint">The group is created in this OU.</div>
 
     <label>SAM account name</label>

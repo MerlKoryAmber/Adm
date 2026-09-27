@@ -15,13 +15,7 @@
 
 <div class="panel" style="max-width:660px">
     <label>Parent</label>
-    <select @bind="parentDn">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
+    <OuPicker Value="@parentDn" ValueChanged="v => parentDn = v" RootLabel="(domain root)" />
     <div class="hint">Parent OU or the domain root the new OU is created under.</div>
 
     <label>Name</label>
