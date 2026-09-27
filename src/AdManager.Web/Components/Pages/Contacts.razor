@@ -14,7 +14,7 @@
 }
 
 <div class="toolbar">
-    <input class="searchbox" type="text" placeholder="Search name / email…" @bind="search" @bind:event="oninput" @bind:after="() => page = 0" />
+    <input class="searchbox" type="text" placeholder="Search name / email…" @bind="search" @bind:event="oninput" @bind:after="ReloadFirst" />
     <span class="grow"></span>
     <button @onclick='() => Nav.NavigateTo("contacts/create")'>+ Create</button>
     <button @onclick="Load">Refresh</button>
@@ -40,11 +40,8 @@
 }
 else
 {
-    var filtered = Filtered();
-    var total = filtered.Count;
+    var pageItems = items;
     var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
-    if (page >= pages) page = pages - 1;
-    var pageItems = filtered.Skip(page * PageSize).Take(PageSize).ToList();
 
     <div class="gridpanel">
         <div style="overflow-x:auto">
@@ -77,6 +74,7 @@ else
                             </td>
                         </tr>
                     }
+                    @if (pageItems.Count == 0) { <tr><td colspan="4" class="muted" style="padding:12px">No contacts match.</td></tr> }
                 </tbody>
             </table>
         </div>
@@ -84,11 +82,11 @@ else
 
     <div class="pager">
         <span>@total contact(s)</span>
-        <button @onclick="() => page = 0" disabled="@(page == 0)">« First</button>
-        <button @onclick="() => page--" disabled="@(page == 0)">‹ Prev</button>
+        <button @onclick="() => Go(0)" disabled="@(page == 0)">« First</button>
+        <button @onclick="() => Go(page - 1)" disabled="@(page == 0)">‹ Prev</button>
         <span>Page @(page + 1) / @pages</span>
-        <button @onclick="() => page++" disabled="@(page >= pages - 1)">Next ›</button>
-        <button @onclick="() => page = pages - 1" disabled="@(page >= pages - 1)">Last »</button>
+        <button @onclick="() => Go(page + 1)" disabled="@(page >= pages - 1)">Next ›</button>
+        <button @onclick="() => Go(pages - 1)" disabled="@(page >= pages - 1)">Last »</button>
     </div>
 }
 </RequireAccess>
@@ -97,38 +95,30 @@ else
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private const int PageSize = 50;
-    private List<AdOuNode>? ous;
-    private List<AdContactSummary>? items;
+    private List<AdContactSummary>? items;   // текущая страница
+    private int total;
     private readonly HashSet<string> selected = new();
-    private string search = "", ouDn = "";
+    private string search = "";
     private int page;
     private string? confirmDel;
     private string? banner; private bool ok; private bool confirmBulkDelete;
 
-    protected override async Task OnInitializedAsync()
-    {
-        ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
-        ouDn = ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn;
-        await Load();
-    }
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task ReloadFirst() { page = 0; await Load(); }
+    private async Task Go(int p) { page = Math.Max(0, p); await Load(); }
 
     private async Task Load()
     {
-        try { items = (await Dir.ListContactsAsync(Ui.BaseDn, subtree: true)).ToList(); selected.Clear(); confirmBulkDelete = false; confirmDel = null; page = 0; }
-        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; }
-    }
-
-    private List<AdContactSummary> Filtered()
-    {
-        var q = items!.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(search))
+        try
         {
-            var t = search.Trim();
-            q = q.Where(c =>
-                (c.Name?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (c.Mail?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false));
+            var res = await Dir.ListContactsPagedAsync(Ui.BaseDn, subtree: true, search, page * PageSize, PageSize);
+            items = res.Items.ToList(); total = res.Total;
+            confirmDel = null;
+            var pages = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+            if (page >= pages) { page = pages - 1; if (page < 0) page = 0; }
         }
-        return q.ToList();
+        catch (Exception ex) { ok = false; banner = "Error: " + ex.Message; items = new(); total = 0; }
     }
 
     private bool AllOnPageSelected(List<AdContactSummary> pageItems) => pageItems.Count > 0 && pageItems.All(c => selected.Contains(c.Dn));
@@ -156,5 +146,4 @@ else
     private async Task Delete(string dn) { Show(await Mgmt.DeleteObjectAsync(await Actor(), dn)); confirmDel = null; await Load(); }
 
     private void Show(OperationResult r) { ok = r.Success; banner = r.Success ? "Done." : ("Error: " + r.Message); }
-    private static string Indent(int d) => new string(' ', d * 3);
 }

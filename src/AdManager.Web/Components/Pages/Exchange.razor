@@ -29,13 +29,7 @@
         <h3>Membership</h3>
         <label>Group identity</label><input type="text" @bind="dgIdentity" placeholder="All-Sales" />
         <label>Member</label>
-        <select @bind="dgMember">
-            <option value="">— select a user —</option>
-            @foreach (var u in users ?? Enumerable.Empty<AdUserSummary>())
-            {
-                <option value="@u.Dn">@u.DisplayName (@u.SamAccountName)</option>
-            }
-        </select>
+        <PrincipalPicker Value="@dgMember" ValueChanged="v => dgMember = v" ObjectClasses="@(new[] { "user", "group", "contact" })" Placeholder="find member by name…" />
         <div class="btnrow">
             <button @onclick="AddMember" disabled="@(string.IsNullOrWhiteSpace(dgIdentity) || string.IsNullOrEmpty(dgMember))">Add member</button>
             <button class="danger" @onclick="RemoveMember" disabled="@(string.IsNullOrWhiteSpace(dgIdentity) || string.IsNullOrEmpty(dgMember))">Remove member</button>
@@ -47,7 +41,6 @@
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
-    private List<AdUserSummary>? users;
     private string dgName = "", dgOu = "", dgIdentity = "", dgMember = "";
     private string? banner; private bool ok;
 
@@ -59,8 +52,6 @@
             dgOu = ous.Any(o => o.Dn == Ui.GroupsOu) ? Ui.GroupsOu : Ui.BaseDn;
         }
         catch { dgOu = Ui.BaseDn; }
-        try { users = (await Dir.ListUsersAsync(Ui.BaseDn, subtree: true)).ToList(); }
-        catch (Exception ex) { Fail(ex.Message); }
     }
 
     private async Task<TechnicianContext> Actor()

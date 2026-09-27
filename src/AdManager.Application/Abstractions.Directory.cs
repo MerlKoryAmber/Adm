@@ -26,11 +26,33 @@ public sealed record AdSearchResult(string Dn, string Name, string? SamAccountNa
 
 public sealed record AdObjectDetails(string Dn, IReadOnlyDictionary<string, string?> Attributes);
 
+/// <summary>Страница результатов + общее число совпадений (для серверной пагинации).</summary>
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Total)
+{
+    public static readonly PagedResult<T> Empty = new(Array.Empty<T>(), 0);
+}
+
+/// <summary>Фильтры грида пользователей (серверная сторона).</summary>
+public sealed record UserListFilter(
+    string? Search = null,
+    bool LockedOnly = false,
+    bool DisabledOnly = false,
+    bool HideDisabled = false);
+
 /// <summary>Чтение каталога AD (для UI-обзора). Read-only, под operational identity.</summary>
 public interface IAdDirectory
 {
     Task<IReadOnlyList<AdUserSummary>> ListUsersAsync(string ouDn, bool subtree, CancellationToken ct = default);
     Task<IReadOnlyList<AdGroupSummary>> ListGroupsAsync(string ouDn, bool subtree, CancellationToken ct = default);
+
+    /// <summary>Страница пользователей с серверной пагинацией (VLV) + фильтрами. Total — всего совпадений.</summary>
+    Task<PagedResult<AdUserSummary>> ListUsersPagedAsync(string ouDn, bool subtree, UserListFilter filter, int skip, int take, CancellationToken ct = default);
+    /// <summary>Страница групп с серверной пагинацией (VLV) + поиск по подстроке.</summary>
+    Task<PagedResult<AdGroupSummary>> ListGroupsPagedAsync(string ouDn, bool subtree, string? search, int skip, int take, CancellationToken ct = default);
+    /// <summary>Страница компьютеров с серверной пагинацией (VLV) + поиск по подстроке + фильтр «только отключённые».</summary>
+    Task<PagedResult<AdComputerSummary>> ListComputersPagedAsync(string ouDn, bool subtree, string? search, bool disabledOnly, int skip, int take, CancellationToken ct = default);
+    /// <summary>Страница контактов с серверной пагинацией (VLV) + поиск по подстроке.</summary>
+    Task<PagedResult<AdContactSummary>> ListContactsPagedAsync(string ouDn, bool subtree, string? search, int skip, int take, CancellationToken ct = default);
     Task<IReadOnlyList<AdOuSummary>> ListOusAsync(string parentDn, CancellationToken ct = default);
     Task<AdObjectDetails?> GetObjectAsync(string dn, IEnumerable<string> attributes, CancellationToken ct = default);
     Task<IReadOnlyList<AdUserSummary>> ListGroupMembersAsync(string groupDn, CancellationToken ct = default);

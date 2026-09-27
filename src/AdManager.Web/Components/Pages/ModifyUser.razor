@@ -215,13 +215,7 @@ else
                 }
                 else { <div class="hint">Not a member of any group (besides primary).</div> }
                 <div class="toolbar" style="margin:6px 0">
-                    <select class="grow" @bind="addGroupDn">
-                        <option value="">— add to group —</option>
-                        @foreach (var g in allGroups ?? Enumerable.Empty<AdGroupSummary>())
-                        {
-                            <option value="@g.Dn">@g.Name</option>
-                        }
-                    </select>
+                    <span class="grow"><PrincipalPicker Value="@addGroupDn" ValueChanged="v => addGroupDn = v" ObjectClasses="@(new[] { "group" })" Icon="👥" Placeholder="find a group to add…" /></span>
                     <button @onclick="AddToGroup" disabled="@string.IsNullOrEmpty(addGroupDn)">Add</button>
                 </div>
             }
@@ -288,7 +282,6 @@ else
     private bool pne, enabled;
     private readonly Dictionary<string, bool> uacFlags = new(); // __cannotChangePwd/__reversibleEncryption/... из userAccountControl
     private List<AdGroupSummary>? userGroups;   // memberOf (читаемые имена)
-    private List<AdGroupSummary>? allGroups;    // для добавления в группу
     private string addGroupDn = "", primaryGroupSel = "";
     private string managerSearch = "", managerDisplay = "";
     private List<AdSearchResult>? managerResults;
@@ -358,7 +351,6 @@ else
                 templateLocked = true; selectedTemplate = etpl; templateSel = etpl.Id.ToString();
             }
             userGroups = (await Dir.ListUserGroupsAsync(Dn)).ToList();
-            allGroups = (await Dir.ListGroupsAsync(Ui.BaseDn, subtree: true)).ToList();
             managerDisplay = Rdn(model.GetValueOrDefault("manager"));
             UnpackLogon(await Dir.GetLogonHoursAsync(Dn));
             homePath = model.GetValueOrDefault("homeDirectory") ?? "";
