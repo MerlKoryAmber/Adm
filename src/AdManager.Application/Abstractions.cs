@@ -59,6 +59,39 @@ public sealed record MailboxProperties(
     long? ProhibitSendQuotaMb = null,
     bool? HiddenFromAddressLists = null);
 
+/// <summary>Параметры создания почтового ящика (Enable-Mailbox), включая персональный архив.</summary>
+public sealed record MailboxProvisioning(
+    string? Alias = null,
+    string? Database = null,            // mailbox database (пусто = авто-выбор Exchange)
+    bool EnableArchive = false,
+    string? ArchiveDatabase = null);    // база персонального архива (пусто = та же/авто)
+
+/// <summary>Почтовая база Exchange (кэшируется).</summary>
+public sealed record MailboxDatabase(string Name, string? Server = null, string? Guid = null);
+
+/// <summary>Мобильное устройство ActiveSync, привязанное к ящику.</summary>
+public sealed record MobileDevice(
+    string Identity,
+    string? DeviceModel = null,
+    string? DeviceOs = null,
+    string? DeviceType = null,
+    string? FirstSyncUtc = null,
+    string? LastSyncUtc = null);
+
+/// <summary>Текущее состояние ящика (для формы Modify). Кэшируется (AD+Exchange).</summary>
+public sealed record MailboxInfo(
+    bool HasMailbox,
+    string? PrimarySmtp = null,
+    IReadOnlyList<string>? EmailAddresses = null,     // proxyAddresses
+    bool HiddenFromAddressLists = false,
+    string? ForwardingAddress = null,
+    bool DeliverToMailboxAndForward = false,
+    IReadOnlyList<string>? FullAccess = null,
+    IReadOnlyList<string>? SendAs = null,
+    IReadOnlyList<string>? SendOnBehalf = null,
+    bool ArchiveEnabled = false,
+    string? Database = null);
+
 public sealed record AuditQuery(
     DateTimeOffset? FromMsk = null,
     DateTimeOffset? ToMsk = null,
@@ -136,6 +169,8 @@ public interface IAdService
 public interface IExchangeService
 {
     Task<OperationResult> EnableMailboxAsync(string userDn, string? alias, CancellationToken ct = default);
+    /// <summary>Enable-Mailbox с выбором базы и (опц.) включением персонального архива.</summary>
+    Task<OperationResult> EnableMailboxAsync(string userDn, MailboxProvisioning provisioning, CancellationToken ct = default);
     Task<OperationResult> DisableMailboxAsync(string userDn, CancellationToken ct = default);
     Task<OperationResult> SetMailboxPropertiesAsync(string identity, MailboxProperties properties, CancellationToken ct = default);
     Task<OperationResult> CreateDistributionGroupAsync(string name, string targetOuDn, CancellationToken ct = default);
@@ -147,6 +182,26 @@ public interface IExchangeService
     Task<OperationResult> AddSendAsAsync(string identity, string trustee, CancellationToken ct = default);
     Task<OperationResult> RemoveSendAsAsync(string identity, string trustee, CancellationToken ct = default);
     Task<OperationResult> SetSendOnBehalfAsync(string identity, string trustee, bool add, CancellationToken ct = default);
+
+    // --- расширенные mailbox-операции (Modify) ---
+    /// <summary>Список почтовых баз (для селекторов). Кэшируется вызывающим слоем.</summary>
+    Task<IReadOnlyList<MailboxDatabase>> ListDatabasesAsync(CancellationToken ct = default);
+    /// <summary>Текущее состояние ящика (адреса, скрытие, форвардинг, права, архив).</summary>
+    Task<MailboxInfo> GetMailboxInfoAsync(string identity, CancellationToken ct = default);
+    /// <summary>Заменить список email-адресов (proxyAddresses). Первый Primary — SMTP:, прочие smtp:.</summary>
+    Task<OperationResult> SetEmailAddressesAsync(string identity, IReadOnlyList<string> addresses, string? primarySmtp, CancellationToken ct = default);
+    /// <summary>Переадресация: адрес (пусто = снять) + доставлять ли копию в сам ящик.</summary>
+    Task<OperationResult> SetForwardingAsync(string identity, string? forwardingSmtp, bool deliverToMailboxAndForward, CancellationToken ct = default);
+    /// <summary>Скрыть/показать ящик в адресной книге.</summary>
+    Task<OperationResult> SetHiddenFromAddressListsAsync(string identity, bool hidden, CancellationToken ct = default);
+    /// <summary>Включить/выключить персональный архив (опц. на конкретной базе).</summary>
+    Task<OperationResult> SetArchiveAsync(string identity, bool enabled, string? archiveDatabase, CancellationToken ct = default);
+    /// <summary>Список мобильных устройств (ActiveSync) ящика.</summary>
+    Task<IReadOnlyList<MobileDevice>> ListMobileDevicesAsync(string identity, CancellationToken ct = default);
+    /// <summary>Удалённая очистка (wipe) мобильного устройства.</summary>
+    Task<OperationResult> WipeMobileDeviceAsync(string deviceIdentity, CancellationToken ct = default);
+    /// <summary>Убрать партнёрство с мобильным устройством (Remove-MobileDevice).</summary>
+    Task<OperationResult> RemoveMobileDeviceAsync(string deviceIdentity, CancellationToken ct = default);
 }
 
 /// <summary>Какие поля техник вправе задавать для операции над объектом.</summary>

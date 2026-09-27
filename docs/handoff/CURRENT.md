@@ -1,6 +1,19 @@
 # CURRENT — текущее состояние
 
-Обновлено: 2026-09-24 МСК.
+Обновлено: 2026-09-27 МСК.
+
+## Сделано в сессии 2026-09-27 (Exchange + OU-дерево + Settings)
+- **OU-дерево вместо плоских select** во всех формах Create (user/group/computer/contact/OU/bulk) и Move (Users bulk, Group/Computer/OU modify): новый переиспользуемый `Components/Shared/OuPicker.razor` — компактное выпадающее дерево из `IOuTreeProvider` (кэш + фильтр системных контейнеров). CSS `.oupick*` в app.css. `Indent()`/`ous` в этих формах местами остались неиспользуемыми (варнинги, не ошибки).
+- **PFX — загрузка файлом** (Settings): `InputFile` («Choose PFX file…», кнопка в стиле панели `.uploadbtn`) вместо ручного ввода пути; файл сохраняется в `App_Data/certs`, путь подставляется сам. Лимит 512 КБ, только .pfx/.p12.
+- **Settings → раздел Administration** (левое меню): верхняя вкладка Settings убрана; Administration = Panel users (ManageDelegation) + Settings-подменю (Email & HTTPS / Exchange cache / Operational identity / Secret encryption / Audit logs), якоря `#…`. `MainLayout`: Section `settings`→Administration, `CanAdministration`/`AdministrationHome`.
+- **Вкладка Exchange в Create/Modify user** (`Components/Shared/MailboxTab.razor`):
+  - Create: галка **Create mailbox** над полями (иначе раздел игнорируется) + выбор mailbox database + **персональный архив** с выбором базы. После создания юзера → `EnableMailboxAsync(MailboxProvisioning)`.
+  - Modify: email-адреса (proxyAddresses, primary), делегация (Full Access/Send As/Send on Behalf), скрытие из GAL, переадресация, **мобильные устройства** (refresh/wipe/remove). Блоки — по правам роли.
+  - Показ вкладки: `UserTemplate.IncludeMailbox` (тумблер в редакторе шаблонов) + право актора.
+- **Права ролей**: новая группа «Exchange — Mailbox» (ManageMailboxPermissions=делегация, EmailAddresses, Forwarding, AddressBook, Mobile).
+- **Кэш Exchange**: `IExchangeDataCache`/`ExchangeDataCache` (Web singleton) + `ExchangeDataRefresher` (BackgroundService) — список баз, интервал из `AppSettings.ExchangeCache.DatabaseListRefreshHours` (24ч; mailbox-атрибуты — 6ч). В Settings — интервалы + «Force refresh now».
+- **Delete/Disable mailbox** — кнопки временно убраны (Exchange.razor, bulk + single), методы оставлены в коде.
+- Задеплоено на IIS `http://localhost:8080`, проверено вживую (OU-дерево, вкладка Exchange, Settings в Administration, PFX-кнопка, Exchange cache). Exchange-операции рантайм не верифицированы (нет сервера). Сборка 0 ошибок. **Не закоммичено** на момент записи.
 
 ## Кратко
 - Ветка `feature/ad-full-management` = `main` = **`326671f`**, запушены на GitHub (`MerlKoryAmber/Adm`). Рабочее дерево чистое.

@@ -24,7 +24,7 @@
     <div class="bulkbar">
         <span class="count">@selected.Count selected</span>
         <button @onclick="BulkEnable">Enable mailbox</button>
-        <button class="danger" @onclick="BulkDisable">Disable mailbox</button>
+        @* «Disable mailbox» (удаление ящика) временно убрано по требованию — оставляем только включение. *@
         <button class="linkbtn" @onclick="ClearSel">clear</button>
     </div>
 }
@@ -87,7 +87,7 @@ else
             <div class="hint">Mailbox alias; leave empty to keep the default.</div>
             <div class="btnrow">
                 <button class="primary" @onclick="EnableMailbox">Enable mailbox</button>
-                <button class="danger" @onclick="DisableMailbox">Disable mailbox</button>
+                @* «Disable mailbox» (удаление ящика) временно убрано по требованию. *@
             </div>
 
             <label>Issue warning quota (MB)</label><input type="text" @bind="warnMb" />
@@ -210,7 +210,7 @@ else
     private async Task BulkEnable()
     {
         var actor = await Actor(); int okc = 0, fail = 0;
-        foreach (var dn in selected.ToList()) { var r = await Ex.EnableMailboxAsync(actor, dn, null); if (r.Success) okc++; else fail++; }
+        foreach (var dn in selected.ToList()) { var r = await Ex.EnableMailboxAsync(actor, dn, (string?)null); if (r.Success) okc++; else fail++; }
         ok = fail == 0; banner = $"Enable mailbox: {okc} ok, {fail} failed."; selected.Clear();
     }
 

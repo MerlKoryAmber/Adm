@@ -88,4 +88,8 @@ public sealed class AllowAllRbacEngine : IRbacEngine
 public static class MskTime
 {
     public static DateTimeOffset Now => DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(3));
+
+    /// <summary>Перевести UTC-момент в МСК (UTC+3).</summary>
+    public static DateTimeOffset ToMsk(DateTime utc) =>
+        new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToOffset(TimeSpan.FromHours(3));
 }

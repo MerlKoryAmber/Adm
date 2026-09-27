@@ -1,6 +1,7 @@
 @page "/users/create"
 @inject IAdDirectory Dir
 @inject AdManagementService Mgmt
+@inject ExchangeManagementService Exchange
 @inject IRbacEngine Rbac
 @inject IUserTemplateStore Templates
 @inject UiOptions Ui
@@ -19,13 +20,8 @@
     <div class="grid2">
         <div>
             <label>Target OU</label>
-            <select @bind="ouDn" @bind:after="RefreshAllowedFields">
-                <option value="@Ui.BaseDn">(domain root)</option>
-                @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-                {
-                    <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-                }
-            </select>
+            <OuPicker Value="@ouDn" ValueChanged="PickOu" />
+            <div class="hint">Where the new account is created.</div>
         </div>
         <div>
             <label>Layout template</label>
@@ -54,8 +50,18 @@
         var idx = i;
         <button class="tabbtn @(sel == idx ? "on" : null)" @onclick="() => sel = idx">@Layout[idx].Title</button>
     }
+    @if (ShowMailboxTab)
+    {
+        <button class="tabbtn @(sel == Layout.Count ? "on" : null)" @onclick="() => sel = Layout.Count">Exchange</button>
+    }
 </div>
 
+@if (ShowMailboxTab && sel == Layout.Count)
+{
+    <MailboxTab Mode="Create" Actor="actor" Access="access" Provision="provision" />
+}
+else
+{
 <div class="panel" style="max-width:660px">
     @foreach (var f in CurrentTab.Fields)
     {
@@ -113,11 +119,12 @@
             else if (key == "displayName") { <div class="hint">CN of the object. Empty → SAM account name.</div> }
         }
     }
+</div>
+}
 
-    <div class="btnrow" style="margin-top:16px">
-        <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(sam)">Create user</button>
-        <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
-    </div>
+<div class="btnrow" style="margin-top:16px;max-width:660px">
+    <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(sam)">Create user</button>
+    <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
 </div>
 </RequireAccess>
 
@@ -139,12 +146,26 @@
     private FieldPermission allowedFields = FieldPermission.All;
     private bool templateLocked;
 
+    private TechnicianContext actor = default!;
+    private EffectiveAccess access = new(false, new HashSet<Permission>());
+    private readonly MailboxTab.MailboxProvisionModel provision = new();
+    private bool CanEnableMailbox => access.Can(Permission.EnableMailbox);
+    private bool ShowMailboxTab => CanEnableMailbox && (selectedTemplate?.IncludeMailbox ?? true);
+
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
     private string Upn => (string.IsNullOrWhiteSpace(sam) ? "user" : sam) + "@" + Ui.Domain;
 
+    private async Task PickOu(string dn)
+    {
+        ouDn = dn;
+        await RefreshAllowedFields();
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
+        access = await Rbac.EffectiveAccessAsync(actor);
         ous = (await Dir.ListAllOusAsync(Ui.BaseDn)).ToList();
         ouDn = ous.Any(o => o.Dn == Ui.UsersOu) ? Ui.UsersOu : (ous.Any(o => o.Dn == Ui.RootOu) ? Ui.RootOu : Ui.BaseDn);
         templates = (await Templates.ListAsync()).Where(t => t.Kind == "Create").ToList();
@@ -247,7 +268,6 @@
         var miss = MissingRequired();
         if (miss.Count > 0) { ok = false; banner = "Required: " + string.Join(", ", miss); return; }
 
-        var actor = CurrentUser.From(AuthState is null ? null : (await AuthState).User);
         var display = model.GetValueOrDefault("displayName");
         if (string.IsNullOrWhiteSpace(display)) display = sam;
         var upn = model.GetValueOrDefault("userPrincipalName");
@@ -275,22 +295,39 @@
         ok = r.Success;
         banner = r.Success ? $"User '{sam}' created.{note}" : ("Error: " + r.Message);
 
-        if (r.Success && (mustChange || pwdNeverExpires))
+        var needFollowUp = r.Success && (mustChange || pwdNeverExpires || (ShowMailboxTab && provision.Create));
+        if (needFollowUp)
         {
             // Не собираем DN строкой (CN мог быть экранирован) — находим фактический DN по sAMAccountName.
             var found = (await Dir.SearchAsync(ouDn, sam.Trim()))
                 .FirstOrDefault(x => string.Equals(x.SamAccountName, sam.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (found is null) { ok = false; banner += " Account options NOT applied: created user not found for follow-up."; }
+            if (found is null) { ok = false; banner += " Follow-up NOT applied: created user not found."; }
             else
             {
-                var opt = await Mgmt.SetAccountOptionsAsync(actor, found.Dn, new AccountOptions(
-                    MustChangePasswordAtNextLogon: mustChange ? true : null,
-                    PasswordNeverExpires: pwdNeverExpires ? true : null));
-                if (!opt.Success) { ok = false; banner += " Account options failed: " + opt.Message; }
+                if (mustChange || pwdNeverExpires)
+                {
+                    var opt = await Mgmt.SetAccountOptionsAsync(actor, found.Dn, new AccountOptions(
+                        MustChangePasswordAtNextLogon: mustChange ? true : null,
+                        PasswordNeverExpires: pwdNeverExpires ? true : null));
+                    if (!opt.Success) { ok = false; banner += " Account options failed: " + opt.Message; }
+                }
+                if (ShowMailboxTab && provision.Create)
+                {
+                    var prov = new MailboxProvisioning(
+                        Alias: sam.Trim(),
+                        Database: string.IsNullOrWhiteSpace(provision.Database) ? null : provision.Database,
+                        EnableArchive: provision.EnableArchive,
+                        ArchiveDatabase: string.IsNullOrWhiteSpace(provision.ArchiveDatabase) ? null : provision.ArchiveDatabase);
+                    var mb = await Exchange.EnableMailboxAsync(actor, found.Dn, prov);
+                    banner += mb.Success ? " Mailbox created." : (" Mailbox failed: " + mb.Message);
+                    if (!mb.Success) ok = false;
+                }
             }
         }
-        if (r.Success) { sam = password = ""; model.Clear(); ApplyTemplateDefaults(); }
+        if (r.Success)
+        {
+            sam = password = ""; model.Clear(); ApplyTemplateDefaults();
+            provision.Create = false; provision.Database = provision.ArchiveDatabase = null; provision.EnableArchive = false;
+        }
     }
-
-    private static string Indent(int d) => new string(' ', d * 3);
 }

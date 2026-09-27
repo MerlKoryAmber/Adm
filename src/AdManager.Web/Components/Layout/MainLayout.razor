@@ -15,8 +15,7 @@
             @if (access.Can(Permission.ManageDelegation)) { <a class="tab @(Section == "Delegation" ? "active" : null)" href="delegation">Delegation</a> }
             @if (access.Can(Permission.ManageAutomation)) { <a class="tab @(Section == "Automation" ? "active" : null)" href="automation">Automation</a> }
             @if (access.Can(Permission.ManagePasswordExpiry)) { <a class="tab @(Section == "PasswordExpiry" ? "active" : null)" href="password-expiry">Password Expiry</a> }
-            @if (access.Can(Permission.ManageSettings)) { <a class="tab @(Section == "Settings" ? "active" : null)" href="settings">Settings</a> }
-            @if (access.Can(Permission.ManageDelegation)) { <a class="tab @(Section == "Administration" ? "active" : null)" href="administration">Administration</a> }
+            @if (CanAdministration) { <a class="tab @(Section == "Administration" ? "active" : null)" href="@AdministrationHome">Administration</a> }
         </nav>
         <div class="topright">
             <span class="domainchip">Domain: @Ui.Domain</span>
@@ -129,15 +128,22 @@
                 <div class="treegroup">Password Expiry</div>
                 <NavLink class="treeitem" href="password-expiry" Match="NavLinkMatch.All">Policy &amp; reminders</NavLink>
             }
-            else if (Section == "Settings")
-            {
-                <div class="treegroup">Settings</div>
-                <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">Email &amp; HTTPS</NavLink>
-            }
             else if (Section == "Administration")
             {
-                <div class="treegroup">Administration</div>
-                <NavLink class="treeitem" href="administration" Match="NavLinkMatch.All">Panel users</NavLink>
+                @if (access.Can(Permission.ManageDelegation))
+                {
+                    <div class="treegroup">Administration</div>
+                    <NavLink class="treeitem" href="administration" Match="NavLinkMatch.All">Panel users</NavLink>
+                }
+                @if (access.Can(Permission.ManageSettings))
+                {
+                    <div class="treegroup">Settings</div>
+                    <NavLink class="treeitem" href="settings" Match="NavLinkMatch.All">Email &amp; HTTPS</NavLink>
+                    <a class="treeitem" href="settings#exchange">Exchange cache</a>
+                    <a class="treeitem" href="settings#identity">Operational identity</a>
+                    <a class="treeitem" href="settings#secrets">Secret encryption</a>
+                    <a class="treeitem" href="settings#audit">Audit logs</a>
+                }
             }
         </aside>
         }
@@ -159,7 +165,7 @@
             if (p.StartsWith("delegation")) return "Delegation";
             if (p.StartsWith("automation")) return "Automation";
             if (p.StartsWith("password-expiry")) return "PasswordExpiry";
-            if (p.StartsWith("settings")) return "Settings";
+            if (p.StartsWith("settings")) return "Administration";
             if (p.StartsWith("administration")) return "Administration";
             return "Management";
         }
@@ -181,6 +187,9 @@
         Permission.SetMailboxProperties, Permission.ManageDistribution, Permission.ManageMailboxPermissions);
     private bool CanManagement => CanUsers || CanGroups || CanComputers || CanOus || CanContacts || CanExchange
         || access.Can(Permission.ManageGpoLinks);
+    // Administration объединяет Panel users (ManageDelegation) и Settings (ManageSettings).
+    private bool CanAdministration => access.CanAny(Permission.ManageDelegation, Permission.ManageSettings);
+    private string AdministrationHome => access.Can(Permission.ManageDelegation) ? "administration" : "settings";
 
     // Куда ведёт вкладка Management — первая доступная страница.
     private string ManagementHome =>

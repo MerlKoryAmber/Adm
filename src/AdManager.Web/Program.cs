@@ -44,6 +44,10 @@ builder.Services.AddSingleton<IOuTreeProvider>(sp =>
         sp.GetRequiredService<UiOptions>().BaseDn,
         sp.GetRequiredService<ILoggerFactory>().CreateLogger<OuTreeCache>()));
 builder.Services.AddHostedService<OuTreeRefresher>();
+// Кэш данных Exchange (singleton): список почтовых баз. Обновляется по расписанию
+// (ExchangeCache.DatabaseListRefreshHours, по умолчанию 24ч) + принудительно из Settings.
+builder.Services.AddSingleton<IExchangeDataCache, ExchangeDataCache>();
+builder.Services.AddHostedService<ExchangeDataRefresher>();
 // Retention аудита: раз в сутки чистит записи старше AuditRetentionDays (Settings).
 builder.Services.AddHostedService<AuditRetentionService>();
 // Провайдер аудита: ADMGR_AUDIT=Ef (SQL, по умолчанию) | File (JSONL, без БД).

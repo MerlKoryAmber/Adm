@@ -38,7 +38,11 @@ public enum Permission
     DisableMailbox,
     SetMailboxProperties,
     ManageDistribution,
-    ManageMailboxPermissions,
+    ManageMailboxPermissions,      // делегирование ящика: Full Access / Send As / Send on Behalf
+    ManageMailboxEmailAddresses,   // proxyAddresses (список email)
+    ManageMailboxForwarding,       // переадресация
+    ManageMailboxAddressBook,      // скрытие из адресной книги
+    ManageMailboxMobile,           // получение/очистка списка мобильных устройств
 
     // Group Policy
     ManageGpoLinks,

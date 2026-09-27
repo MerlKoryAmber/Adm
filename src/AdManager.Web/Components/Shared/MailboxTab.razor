@@ -1,0 +1,303 @@
+@namespace AdManager.Web.Components.Shared
+@inject ExchangeManagementService Exchange
+@inject IExchangeDataCache ExchangeCache
+@inject IRbacEngine Rbac
+@using AdManager.Application.Abstractions
+@using AdManager.Domain.Enums
+
+@* Вкладка Exchange для форм Create/Modify user.
+   Mode="Create": provisioning нового ящика (галка Create mailbox → база + персональный архив).
+   Mode="Modify": управление существующим ящиком (email-адреса, делегация, скрытие, форвард, устройства).
+   Доступ к каждому блоку — по правам роли актора (access). *@
+
+@if (Mode == "Create")
+{
+    <div class="panel" style="max-width:660px">
+        <div class="checkbox" style="margin-bottom:6px">
+            <input type="checkbox" id="mbxcreate" checked="@Provision.Create" @onchange="OnCreateToggle" />
+            <label for="mbxcreate"><strong>Create mailbox</strong></label>
+        </div>
+        <div class="hint">When unchecked, nothing in this tab is applied — the user is created without a mailbox.</div>
+
+        @if (Provision.Create)
+        {
+            <label>Mailbox database</label>
+            <select @bind="Provision.Database">
+                <option value="">(auto — let Exchange choose)</option>
+                @foreach (var db in Databases)
+                {
+                    <option value="@db.Name">@db.Name@(db.Server is { Length: > 0 } ? $" · {db.Server}" : "")</option>
+                }
+            </select>
+            <div class="hint">Where the mailbox is hosted. Database list is cached from Exchange.</div>
+
+            <div class="checkbox" style="margin-top:10px">
+                <input type="checkbox" id="mbxarch" checked="@Provision.EnableArchive" @onchange="e => Provision.EnableArchive = (bool)(e.Value ?? false)" />
+                <label for="mbxarch">Enable personal archive</label>
+            </div>
+            @if (Provision.EnableArchive)
+            {
+                <label>Archive database</label>
+                <select @bind="Provision.ArchiveDatabase">
+                    <option value="">(same as mailbox / auto)</option>
+                    @foreach (var db in Databases)
+                    {
+                        <option value="@db.Name">@db.Name@(db.Server is { Length: > 0 } ? $" · {db.Server}" : "")</option>
+                    }
+                </select>
+            }
+            @if (Databases.Count == 0)
+            {
+                <div class="hint" style="margin-top:8px">No cached mailbox databases (Exchange not reachable, or cache not warmed). You can still create the mailbox with auto database selection.</div>
+            }
+        }
+    </div>
+}
+else
+{
+    @* Modify mode *@
+    @if (loading)
+    {
+        <div class="panel" style="max-width:660px"><p class="muted">Loading mailbox…</p></div>
+    }
+    else if (info is null || !info.HasMailbox)
+    {
+        <div class="panel" style="max-width:660px">
+            <div class="hint">This user has no mailbox. Enable a mailbox from the Exchange section.</div>
+        </div>
+    }
+    else
+    {
+        @if (banner is not null) { <div class="banner @(bok ? "ok" : "err")">@banner</div> }
+
+        @if (Can(Permission.ManageMailboxEmailAddresses))
+        {
+            <div class="panel" style="max-width:660px">
+                <h3>Email addresses</h3>
+                <div class="hint">Primary SMTP is bold. One address per line; mark one as primary.</div>
+                @for (int i = 0; i < emails.Count; i++)
+                {
+                    var idx = i;
+                    <div class="fieldrow">
+                        <input type="text" class="grow" @bind="emails[idx]" placeholder="user@domain.com" />
+                        <label class="chkinline"><input type="radio" name="primsmtp" checked="@(primarySmtp == Bare(emails[idx]))" @onchange="() => primarySmtp = Bare(emails[idx])" /> primary</label>
+                        <button class="linkbtn danger" @onclick="() => emails.RemoveAt(idx)">×</button>
+                    </div>
+                }
+                <div class="btnrow" style="margin-top:8px">
+                    <button class="linkbtn" @onclick='() => emails.Add("")'>+ Add address</button>
+                    <span class="grow"></span>
+                    <button class="primary" @onclick="SaveEmails">Save addresses</button>
+                </div>
+            </div>
+        }
+
+        @if (Can(Permission.ManageMailboxPermissions))
+        {
+            <div class="panel" style="max-width:660px;margin-top:16px">
+                <h3>Delegation</h3>
+                <div class="grid2">
+                    <div>
+                        <label>Full Access</label>
+                        <div class="hint">@(info.FullAccess is { Count: > 0 } ? string.Join(", ", info.FullAccess) : "—")</div>
+                    </div>
+                    <div>
+                        <label>Send As</label>
+                        <div class="hint">@(info.SendAs is { Count: > 0 } ? string.Join(", ", info.SendAs) : "—")</div>
+                    </div>
+                </div>
+                <div class="fieldrow" style="margin-top:8px">
+                    <input type="text" class="grow" @bind="delegateTrustee" placeholder="user or group (SamAccountName / UPN)" />
+                    <select @bind="delegateKind" style="max-width:170px">
+                        <option value="full">Full Access</option>
+                        <option value="sendas">Send As</option>
+                        <option value="behalf">Send on Behalf</option>
+                    </select>
+                    <button class="linkbtn" @onclick="() => ApplyDelegation(true)">Add</button>
+                    <button class="linkbtn danger" @onclick="() => ApplyDelegation(false)">Remove</button>
+                </div>
+            </div>
+        }
+
+        @if (Can(Permission.ManageMailboxAddressBook))
+        {
+            <div class="panel" style="max-width:660px;margin-top:16px">
+                <h3>Address book</h3>
+                <div class="checkbox">
+                    <input type="checkbox" id="hidden" checked="@hidden" @onchange="ToggleHidden" />
+                    <label for="hidden">Hidden from address lists (GAL)</label>
+                </div>
+            </div>
+        }
+
+        @if (Can(Permission.ManageMailboxForwarding))
+        {
+            <div class="panel" style="max-width:660px;margin-top:16px">
+                <h3>Forwarding</h3>
+                <label>Forward to (SMTP address)</label>
+                <input type="text" @bind="forwarding" placeholder="leave empty to disable" />
+                <div class="checkbox" style="margin-top:8px">
+                    <input type="checkbox" id="dmf" checked="@deliverAndForward" @onchange="e => deliverAndForward = (bool)(e.Value ?? false)" />
+                    <label for="dmf">Also deliver to this mailbox</label>
+                </div>
+                <div class="btnrow" style="margin-top:8px"><button class="primary" @onclick="SaveForwarding">Save forwarding</button></div>
+            </div>
+        }
+
+        @if (Can(Permission.ManageMailboxMobile))
+        {
+            <div class="panel" style="max-width:660px;margin-top:16px">
+                <div class="toolbar" style="margin-top:0">
+                    <h3 style="margin:0">Mobile devices</h3>
+                    <span class="grow"></span>
+                    <button class="linkbtn" @onclick="LoadDevices" disabled="@devicesLoading">@(devicesLoading ? "Loading…" : "Refresh list")</button>
+                </div>
+                @if (devices is null)
+                {
+                    <div class="hint">Click "Refresh list" to fetch mobile devices from Exchange.</div>
+                }
+                else if (devices.Count == 0)
+                {
+                    <div class="hint">No mobile devices.</div>
+                }
+                else
+                {
+                    <table class="grid">
+                        <thead><tr><th>Model</th><th>OS</th><th>Type</th><th>Last sync</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var d in devices)
+                            {
+                                <tr>
+                                    <td>@(d.DeviceModel ?? "—")</td>
+                                    <td>@(d.DeviceOs ?? "—")</td>
+                                    <td>@(d.DeviceType ?? "—")</td>
+                                    <td>@(d.LastSyncUtc ?? "—")</td>
+                                    <td>
+                                        <button class="linkbtn danger" @onclick="() => WipeDevice(d.Identity)">Wipe</button>
+                                        <button class="linkbtn" @onclick="() => RemoveDevice(d.Identity)">Remove</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        }
+    }
+}
+
+@code {
+    /// <summary>"Create" — provisioning; "Modify" — управление существующим ящиком.</summary>
+    [Parameter, EditorRequired] public string Mode { get; set; } = "Create";
+    /// <summary>DN пользователя (Modify) / целевой DN после создания (Create). В Create может быть пустым до сохранения.</summary>
+    [Parameter] public string? UserDn { get; set; }
+    /// <summary>Актор (для RBAC + операций).</summary>
+    [Parameter, EditorRequired] public TechnicianContext Actor { get; set; } = default!;
+    /// <summary>Сводный доступ актора (для показа блоков).</summary>
+    [Parameter] public EffectiveAccess Access { get; set; } = new(false, new HashSet<Permission>());
+    /// <summary>Параметры provisioning (Create) — двусторонняя связь с формой создания.</summary>
+    [Parameter] public MailboxProvisionModel Provision { get; set; } = new();
+
+    private IReadOnlyList<MailboxDatabase> Databases => ExchangeCache.Databases;
+
+    // Modify state
+    private bool loading, devicesLoading;
+    private MailboxInfo? info;
+    private List<string> emails = new();
+    private string? primarySmtp;
+    private bool hidden;
+    private string forwarding = "";
+    private bool deliverAndForward;
+    private string delegateTrustee = "", delegateKind = "full";
+    private IReadOnlyList<MobileDevice>? devices;
+    private string? banner; private bool bok;
+
+    private bool Can(Permission p) => Access.Can(p);
+    private static string Bare(string a) => a.Contains(':') ? a[(a.IndexOf(':') + 1)..].Trim() : a.Trim();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Mode == "Modify" && !string.IsNullOrEmpty(UserDn))
+        {
+            loading = true;
+            info = await Exchange.GetMailboxInfoAsync(Actor, UserDn!);
+            if (info.HasMailbox)
+            {
+                emails = (info.EmailAddresses ?? Array.Empty<string>()).Select(Bare).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+                primarySmtp = info.PrimarySmtp;
+                if (primarySmtp is { Length: > 0 } && !emails.Contains(primarySmtp, StringComparer.OrdinalIgnoreCase)) emails.Insert(0, primarySmtp);
+                hidden = info.HiddenFromAddressLists;
+                forwarding = info.ForwardingAddress ?? "";
+                deliverAndForward = info.DeliverToMailboxAndForward;
+            }
+            loading = false;
+        }
+    }
+
+    private void OnCreateToggle(ChangeEventArgs e) => Provision.Create = (bool)(e.Value ?? false);
+
+    private async Task SaveEmails()
+    {
+        var addrs = emails.Select(Bare).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var r = await Exchange.SetEmailAddressesAsync(Actor, UserDn!, addrs, primarySmtp);
+        Report(r.Success, r.Success ? "Email addresses saved." : "Error: " + r.Message);
+    }
+
+    private async Task ApplyDelegation(bool add)
+    {
+        if (string.IsNullOrWhiteSpace(delegateTrustee)) return;
+        var t = delegateTrustee.Trim();
+        var r = delegateKind switch
+        {
+            "sendas" => add ? await Exchange.AddSendAsAsync(Actor, UserDn!, t) : await Exchange.RemoveSendAsAsync(Actor, UserDn!, t),
+            "behalf" => await Exchange.SetSendOnBehalfAsync(Actor, UserDn!, t, add),
+            _ => add ? await Exchange.AddMailboxPermissionAsync(Actor, UserDn!, t) : await Exchange.RemoveMailboxPermissionAsync(Actor, UserDn!, t),
+        };
+        Report(r.Success, r.Success ? "Delegation updated." : "Error: " + r.Message);
+        if (r.Success) { info = await Exchange.GetMailboxInfoAsync(Actor, UserDn!); delegateTrustee = ""; }
+    }
+
+    private async Task ToggleHidden(ChangeEventArgs e)
+    {
+        hidden = (bool)(e.Value ?? false);
+        var r = await Exchange.SetHiddenFromAddressListsAsync(Actor, UserDn!, hidden);
+        Report(r.Success, r.Success ? (hidden ? "Hidden from address book." : "Visible in address book.") : "Error: " + r.Message);
+    }
+
+    private async Task SaveForwarding()
+    {
+        var r = await Exchange.SetForwardingAsync(Actor, UserDn!, string.IsNullOrWhiteSpace(forwarding) ? null : forwarding.Trim(), deliverAndForward);
+        Report(r.Success, r.Success ? "Forwarding saved." : "Error: " + r.Message);
+    }
+
+    private async Task LoadDevices()
+    {
+        devicesLoading = true;
+        devices = await Exchange.ListMobileDevicesAsync(Actor, UserDn!);
+        devicesLoading = false;
+    }
+
+    private async Task WipeDevice(string id)
+    {
+        var r = await Exchange.WipeMobileDeviceAsync(Actor, UserDn!, id);
+        Report(r.Success, r.Success ? "Wipe requested." : "Error: " + r.Message);
+    }
+
+    private async Task RemoveDevice(string id)
+    {
+        var r = await Exchange.RemoveMobileDeviceAsync(Actor, UserDn!, id);
+        Report(r.Success, r.Success ? "Device removed." : "Error: " + r.Message);
+        if (r.Success) await LoadDevices();
+    }
+
+    private void Report(bool ok, string msg) { bok = ok; banner = msg; }
+
+    /// <summary>Модель provisioning для формы Create (передаётся по ссылке).</summary>
+    public sealed class MailboxProvisionModel
+    {
+        public bool Create { get; set; }
+        public string? Database { get; set; }
+        public bool EnableArchive { get; set; }
+        public string? ArchiveDatabase { get; set; }
+    }
+}

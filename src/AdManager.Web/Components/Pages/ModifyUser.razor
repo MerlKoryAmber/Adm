@@ -47,8 +47,18 @@ else
             var idx = i;
             <button class="tabbtn @(sel == idx ? "on" : null)" @onclick="() => sel = idx">@Layout[idx].Title</button>
         }
+        @if (ShowMailboxTab)
+        {
+            <button class="tabbtn @(sel == Layout.Count ? "on" : null)" @onclick="() => sel = Layout.Count">Exchange</button>
+        }
     </div>
 
+    @if (ShowMailboxTab && sel == Layout.Count)
+    {
+        <MailboxTab Mode="Modify" UserDn="@Dn" Actor="actor" Access="access" />
+    }
+    else
+    {
     <div class="panel" style="max-width:640px">
         @foreach (var f in CurrentTab.Fields)
         {
@@ -250,6 +260,7 @@ else
             <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
         </div>
     </div>
+    }
 }
 </RequireAccess>
 
@@ -298,13 +309,20 @@ else
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
 
     private FieldPermission allowedFields = FieldPermission.All;
+    private TechnicianContext actor = default!;
+    private EffectiveAccess access = new(false, new HashSet<Permission>());
+    private bool ShowMailboxTab => access.CanAny(Permission.SetMailboxProperties, Permission.ManageMailboxPermissions,
+        Permission.ManageMailboxEmailAddresses, Permission.ManageMailboxForwarding,
+        Permission.ManageMailboxAddressBook, Permission.ManageMailboxMobile);
 
     protected override async Task OnInitializedAsync()
     {
         if (string.IsNullOrEmpty(Dn)) { banner = "No user specified."; ok = false; return; }
         try
         {
-            allowedFields = await Rbac.AllowedFieldsAsync(await Actor(), Permission.ModifyAttributes, Dn);
+            actor = await Actor();
+            access = await Rbac.EffectiveAccessAsync(actor);
+            allowedFields = await Rbac.AllowedFieldsAsync(actor, Permission.ModifyAttributes, Dn);
             var wanted = TextKeys.Concat(new[] { "sAMAccountName", "userAccountControl" }).ToArray();
             var det = await Dir.GetObjectAsync(Dn, wanted);
             if (det is null) { banner = "User not found (may have been moved or deleted)."; ok = false; return; }

@@ -10,13 +10,7 @@
 
 <div class="panel" style="max-width:760px">
     <label>Default OU (when column empty)</label>
-    <select @bind="defaultOu">
-        <option value="@Ui.BaseDn">(domain root)</option>
-        @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-        {
-            <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-        }
-    </select>
+    <OuPicker Value="@defaultOu" ValueChanged="v => defaultOu = v" />
 
     <label>CSV</label>
     <textarea @bind="csv" rows="10" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:5px;background:var(--primary-dark);color:var(--text);font-family:monospace;font-size:13px"

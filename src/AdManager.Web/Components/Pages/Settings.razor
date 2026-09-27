@@ -3,6 +3,8 @@
 @inject IKeyring Keyring
 @inject ISecretProtector Protector
 @inject IAuditLog Audit
+@inject IExchangeDataCache ExchangeCache
+@inject IWebHostEnvironment Env
 
 <PageTitle>Settings — admanager</PageTitle>
 <h1>Settings</h1>
@@ -55,7 +57,7 @@ else
         </div>
     </div>
 
-    <div class="panel" style="max-width:640px;margin-top:16px">
+    <div class="panel" style="max-width:640px;margin-top:16px" id="https">
         <h3>HTTPS / Certificates</h3>
         <div class="checkbox"><input type="checkbox" id="rq" @bind="model.Https.RequireHttps" /><label for="rq">Require HTTPS (redirect HTTP → HTTPS)</label></div>
         <div class="hint">Enforce TLS for the admin portal. Applied at the web-host level.</div>
@@ -72,8 +74,21 @@ else
 
         @if (model.Https.CertificateSource == "PfxFile")
         {
-            <label>PFX path</label>
-            <input type="text" @bind="model.Https.PfxPath" placeholder="C:\certs\admanager.pfx" />
+            <label>PFX certificate file</label>
+            <div class="uploadrow">
+                <label class="btn uploadbtn">
+                    Choose PFX file…
+                    <InputFile OnChange="OnPfxSelected" accept=".pfx,.p12" style="display:none" />
+                </label>
+                <span class="uploadname">
+                    @if (!string.IsNullOrEmpty(pfxUploadName)) { <text>@pfxUploadName</text> }
+                    else if (!string.IsNullOrEmpty(model.Https.PfxPath)) { <text>@System.IO.Path.GetFileName(model.Https.PfxPath)</text> }
+                    else { <span class="muted">no file selected</span> }
+                </span>
+            </div>
+            <div class="hint">Upload a .pfx/.p12 certificate. Stored under App_Data on the server; the path is filled in automatically.</div>
+            @if (pfxError is { Length: > 0 }) { <div class="hint" style="color:var(--danger)">@pfxError</div> }
+
             <label>PFX password</label>
             <input type="password" @bind="model.Https.PfxPassword" />
             <div class="hint">Password for the PFX file. Encrypted at rest (envelope, AES-256-GCM).</div>
@@ -91,7 +106,7 @@ else
         <div class="banner" style="margin-top:10px">Note: certificate binding changes take effect at the web-host level (IIS site binding or Kestrel). This page stores the intended configuration.</div>
     </div>
 
-    <div class="panel" style="max-width:640px;margin-top:16px">
+    <div class="panel" style="max-width:640px;margin-top:16px" id="identity">
         <h3>Operational identity</h3>
         <div class="hint">Account used to perform AD/Exchange operations on behalf of technicians (never Domain Admin). Default is gMSA (no stored password).</div>
 
@@ -122,7 +137,7 @@ else
         }
     </div>
 
-    <div class="panel" style="max-width:640px;margin-top:16px">
+    <div class="panel" style="max-width:640px;margin-top:16px" id="secrets">
         <h3>Secret encryption</h3>
         <div class="hint">Secrets (SMTP / PFX / operational password) are encrypted with an application key stored outside the database. Back up the key separately from the database — see docs/backup-dr.md.</div>
         <label>Key fingerprint</label>
@@ -143,11 +158,38 @@ else
         <div class="hint">Generates a new key and re-encrypts all stored secrets with it. Back up the new key afterwards; the old key stops being used.</div>
     </div>
 
-    <div class="panel" style="max-width:640px;margin-top:16px">
+    <div class="panel" style="max-width:640px;margin-top:16px" id="audit">
         <h3>Audit logs</h3>
         <label>Retention (days)</label>
         <input type="number" min="0" @bind="model.AuditRetentionDays" />
         <div class="hint">How long audit / logon records are kept. Records older than this are removed daily. 0 = keep forever.</div>
+    </div>
+
+    <div class="panel" style="max-width:640px;margin-top:16px" id="exchange">
+        <h3>Exchange cache</h3>
+        <div class="hint">Exchange data is expensive to query (remote PowerShell), so it is cached on a schedule.</div>
+
+        <div class="grid2">
+            <div>
+                <label>Mailbox database list — refresh every (hours)</label>
+                <input type="number" min="1" @bind="model.ExchangeCache.DatabaseListRefreshHours" />
+                <div class="hint">List of mailbox databases (for the Create-mailbox selectors). Default 24.</div>
+            </div>
+            <div>
+                <label>Mailbox attributes — refresh every (hours)</label>
+                <input type="number" min="1" @bind="model.ExchangeCache.MailboxAttributesRefreshHours" />
+                <div class="hint">Cached mailbox attributes (AD + Exchange). Default 6.</div>
+            </div>
+        </div>
+
+        <div class="hint" style="margin-top:8px">
+            Databases cached: <strong>@ExchangeCache.Databases.Count</strong>
+            @if (ExchangeCache.DatabasesRefreshedUtc is { } t) { <text> · last refresh @MskTime.ToMsk(t).ToString("yyyy-MM-dd HH:mm") МСК</text> }
+        </div>
+        <div class="btnrow" style="margin-top:8px">
+            <button @onclick="ForceExchangeRefresh" disabled="@exRefreshing">@(exRefreshing ? "Refreshing…" : "Force refresh now")</button>
+        </div>
+        <div class="hint">Immediately re-reads the mailbox database list from Exchange.</div>
     </div>
 
     <div class="btnrow" style="margin-top:16px;max-width:640px">
@@ -161,6 +203,43 @@ else
     private string? banner; private bool ok;
     private bool confirmRotate; private bool rotating;
     private string keyFingerprint = "";
+    private string? pfxUploadName; private string? pfxError;
+    private bool exRefreshing;
+
+    private const long MaxPfxBytes = 512 * 1024; // 512 KB — сертификат заведомо мал
+
+    private async Task OnPfxSelected(InputFileChangeEventArgs e)
+    {
+        pfxError = null;
+        var file = e.File;
+        if (file is null) return;
+        if (file.Size > MaxPfxBytes) { pfxError = "File too large (max 512 KB for a certificate)."; return; }
+        var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not (".pfx" or ".p12")) { pfxError = "Only .pfx / .p12 files are allowed."; return; }
+        try
+        {
+            var dir = System.IO.Path.Combine(Env.ContentRootPath, "App_Data", "certs");
+            System.IO.Directory.CreateDirectory(dir);
+            var safe = "admanager-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ext;
+            var dest = System.IO.Path.Combine(dir, safe);
+            await using (var fs = new FileStream(dest, FileMode.Create, FileAccess.Write))
+            await using (var rs = file.OpenReadStream(MaxPfxBytes))
+            {
+                await rs.CopyToAsync(fs);
+            }
+            if (model is not null) model.Https.PfxPath = dest;
+            pfxUploadName = file.Name;
+        }
+        catch (Exception ex) { pfxError = "Upload failed: " + ex.Message; }
+    }
+
+    private async Task ForceExchangeRefresh()
+    {
+        exRefreshing = true;
+        try { await ExchangeCache.RefreshDatabasesAsync(); ok = true; banner = $"Exchange database list refreshed ({ExchangeCache.Databases.Count} databases)."; }
+        catch (Exception ex) { ok = false; banner = "Refresh failed: " + ex.Message; }
+        finally { exRefreshing = false; }
+    }
 
     protected override async Task OnInitializedAsync()
     {

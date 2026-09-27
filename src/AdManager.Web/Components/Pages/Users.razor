@@ -33,13 +33,9 @@
         <button @onclick="() => Bulk(BulkOp.Unlock)">Unlock</button>
         <input type="password" placeholder="new password" @bind="bulkPwd" style="max-width:150px" />
         <button @onclick="BulkReset" disabled="@string.IsNullOrEmpty(bulkPwd)">Reset pwd</button>
-        <select @bind="bulkMoveTo" style="max-width:180px">
-            <option value="">move to…</option>
-            @foreach (var o in ous ?? Enumerable.Empty<AdOuNode>())
-            {
-                <option value="@o.Dn">@Indent(o.Depth)@o.Name</option>
-            }
-        </select>
+        <span style="width:220px;display:inline-block">
+            <OuPicker Value="@bulkMoveTo" ValueChanged="v => bulkMoveTo = v" Placeholder="move to…" />
+        </span>
         <button @onclick="BulkMove" disabled="@string.IsNullOrEmpty(bulkMoveTo)">Move</button>
         @if (!confirmBulkDelete) { <button class="danger" @onclick="() => confirmBulkDelete = true">Delete…</button> }
         else

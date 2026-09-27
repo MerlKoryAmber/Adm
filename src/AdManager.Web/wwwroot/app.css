@@ -197,3 +197,24 @@ table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); 
 /* Растяжение до низа экрана: фиксированная высота от viewport (не max-height,
    иначе контейнер сжимается по содержимому). При переполнении — внутренний скролл. */
 .outree-full { height: calc(100vh - 440px); min-height: 220px; }
+
+/* Компактный OU-picker (выпадающее дерево) — форма Create/Modify user */
+.oupick { position: relative; }
+.oupick-field { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    padding: 7px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer; }
+.oupick-field:hover { border-color: var(--accent); }
+.oupick-field .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oupick-panel { position: absolute; z-index: 30; left: 0; right: 0; margin-top: 4px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35); overflow: hidden; }
+/* дерево внутри панели — компактное, со своим скроллом, без растягивания на экран */
+.oupick-panel .outree { max-height: 320px; min-height: 0; border: 0; border-radius: 0; margin: 0; }
+
+/* Кнопка загрузки файла (PFX и т.п.) в стиле панели */
+.uploadrow { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.uploadbtn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 7px 12px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; font-weight: 500; }
+.uploadbtn:hover { border-color: var(--accent); background: var(--surface-hover); }
+.uploadname { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
