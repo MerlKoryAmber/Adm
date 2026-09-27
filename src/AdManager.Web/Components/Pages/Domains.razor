@@ -1,13 +1,20 @@
 @page "/domains"
 @inject IDomainRegistry Registry
 @inject AdConnectionOptions ActiveConn
+@inject Microsoft.Extensions.Hosting.IHostApplicationLifetime Lifetime
+@inject NavigationManager Nav
 @using AdManager.Application
 
 <PageTitle>Domains — admanager</PageTitle>
-<h1>Managed domains</h1>
+<div class="pagehead">
+    <h1>Managed domains</h1>
+    <span class="grow"></span>
+    <button class="primary" @onclick="ApplyRestart" disabled="@restarting">@(restarting ? "Restarting…" : "Apply changes (restart)")</button>
+</div>
 <RequireAccess Permissions="new[] { Permission.ManageSettings }">
-<p class="subtitle">Active Directory domains this panel manages. Each domain has its own domain controller, search base and operational identity (never Domain Admin). The default domain is the one currently used; switching applies after an app pool recycle (multi-domain switch — planned).</p>
+<p class="subtitle">Active Directory domains this panel manages. Each domain has its own domain controller, search base and operational identity (never Domain Admin). The default (active) domain is the one currently used. After adding or changing the active domain, click <strong>Apply changes (restart)</strong> — the panel restarts itself (a few seconds), no IIS access needed.</p>
 
+@if (restarting) { <div class="banner ok">Restarting the panel to apply the active domain… this page will reconnect automatically in a few seconds. If it doesn't, refresh (Ctrl+F5).</div> }
 @if (banner is not null) { <div class="banner @(ok ? "ok" : "err")">@banner</div> }
 
 @if (list is null)
@@ -155,7 +162,7 @@ else
                 if (existing is not null) editing.CredentialPassword = existing.CredentialPassword;
             }
             await Registry.SaveAsync(editing);
-            ok = true; banner = $"Domain '{editing.Name}' saved. Restart the app pool to apply if it is the active domain.";
+            ok = true; banner = $"Domain '{editing.Name}' saved. If this is the active domain, click \"Apply changes (restart)\" above to apply it.";
             NewForm();
             await Reload();
         }
@@ -165,8 +172,20 @@ else
     private async Task MakeDefault(Guid id)
     {
         await Registry.SetDefaultAsync(id);
-        ok = true; banner = "Default domain changed. Restart the app pool to apply.";
+        ok = true; banner = "Active domain changed. Click \"Apply changes (restart)\" above to apply it.";
         await Reload();
+    }
+
+    private bool restarting;
+    private async Task ApplyRestart()
+    {
+        restarting = true;
+        banner = null;
+        StateHasChanged();
+        // Дать UI отрисовать баннер и отдать ответ, затем остановить приложение.
+        // Под IIS inprocess ANCM автоматически поднимет процесс на следующем запросе,
+        // под Kestrel — служба/пул перезапустит. Прав на IIS не требуется.
+        _ = Task.Run(async () => { await Task.Delay(1200); Lifetime.StopApplication(); });
     }
 
     private async Task Delete(Guid id)
