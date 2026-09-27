@@ -135,8 +135,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 code { background: var(--primary-dark); color: var(--accent); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 a { color: var(--link); }
 
-.tabbar { display: flex; gap: 3px; margin: 10px 0 0; flex-wrap: wrap; }
-.tabbtn { background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; padding: 7px 14px; color: var(--muted); font-size: 13.5px; }
+.tabbar { display: flex; gap: 3px; margin: 10px 0 0; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.tabbtn { background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; padding: 7px 14px; color: var(--muted); font-size: 13.5px; margin-bottom: -1px; }
 .tabbtn:hover { color: var(--text); }
 .tabbtn.on { background: var(--surface-hover); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .tabbtn.add { border-radius: 6px; color: var(--accent); }
@@ -213,6 +213,27 @@ table.lh td.on:hover, table.lh td.off:hover { outline: 1px solid var(--accent); 
 .dropdown-backdrop { position: fixed; inset: 0; z-index: 20; background: transparent; }
 /* дерево внутри панели — компактное, со своим скроллом, без растягивания на экран */
 .oupick-panel .outree { max-height: 320px; min-height: 0; border: 0; border-radius: 0; margin: 0; }
+
+/* Форма Create/Modify user: 2 колонки полей (как в ADManager Plus), панель по ширине
+   вкладок — без пустоты справа. Каждое поле обёрнуто в .field (один grid-элемент). */
+.formpanel { max-width: 1080px; }
+@media (min-width: 860px) {
+    .formpanel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 28px;
+        align-items: start;
+    }
+    .formpanel > hr,
+    .formpanel > .btnrow,
+    .formpanel > .field.fullspan { grid-column: 1 / -1; }
+}
+.formpanel > .field { min-width: 0; margin-bottom: 4px; }
+/* внутри .field label/input ведут себя как раньше (label над полем) */
+.formpanel > .field > label { display: block; }
+.formpanel > .field > input,
+.formpanel > .field > select,
+.formpanel > .field > textarea { width: 100%; }
 
 /* Кнопка загрузки файла (PFX и т.п.) в стиле панели */
 .uploadrow { display: flex; align-items: center; gap: 10px; margin-top: 4px; }

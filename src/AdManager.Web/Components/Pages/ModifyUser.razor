@@ -41,7 +41,7 @@ else
         }
     </div>
 
-    <div class="tabbar">
+    <div class="tabbar" style="max-width:1080px">
         @for (int i = 0; i < Layout.Count; i++)
         {
             var idx = i;
@@ -59,12 +59,13 @@ else
     }
     else
     {
-    <div class="panel" style="max-width:640px">
+    <div class="panel formpanel">
         @foreach (var f in CurrentTab.Fields)
         {
             var key = f.Key;
             var req = f.Required ? " *" : "";
             if (!allowedFields.Allows(key)) { continue; }
+            <div class="field @(WideField(key) ? "fullspan" : null)">
             @if (key == "sAMAccountName")
             {
                 <label>SAM account name</label>
@@ -245,14 +246,17 @@ else
                 <input type="text" value="@model.GetValueOrDefault(key)" @onchange="e => model[key] = e.Value?.ToString()" />
                 @if (key == "userPrincipalName") { <div class="hint">Empty UPN is not cleared.</div> }
             }
+            </div>
         }
 
         <hr />
+        <div class="field">
         <label>Account expires</label>
         <input type="date" @bind="expiry" />
         <div class="btnrow">
             <button @onclick="SetExpiry" disabled="@(expiry is null)">Set expiry</button>
             <button @onclick="ClearExpiry">Clear (never)</button>
+        </div>
         </div>
 
         <div class="btnrow" style="margin-top:16px">
@@ -307,6 +311,14 @@ else
 
     private List<TemplateTab> Layout => selectedTemplate?.Tabs is { Count: > 0 } t ? t : defaultLayout;
     private TemplateTab CurrentTab => Layout[Math.Min(sel, Layout.Count - 1)];
+
+    // Поля, которые в 2-колоночной форме занимают всю ширину (крупные/списочные).
+    private static readonly HashSet<string> WideFieldKeys = new(StringComparer.Ordinal)
+    {
+        "__logonHours", "__memberOf", "__primaryGroup", "manager", "description",
+        "__homeFolder", "__country",
+    };
+    private static bool WideField(string key) => WideFieldKeys.Contains(key);
 
     private FieldPermission allowedFields = FieldPermission.All;
     private TechnicianContext actor = default!;

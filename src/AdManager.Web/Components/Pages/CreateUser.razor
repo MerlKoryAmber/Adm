@@ -44,7 +44,7 @@
     </div>
 </div>
 
-<div class="tabbar">
+<div class="tabbar" style="max-width:1080px">
     @for (int i = 0; i < Layout.Count; i++)
     {
         var idx = i;
@@ -62,12 +62,13 @@
 }
 else
 {
-<div class="panel" style="max-width:660px">
+<div class="panel formpanel">
     @foreach (var f in CurrentTab.Fields)
     {
         var key = f.Key;
         var req = f.Required ? " *" : "";
         if (!allowedFields.Allows(key)) { continue; }
+        <div class="field @(WideField(key) ? "fullspan" : null)">
         @if (key == "sAMAccountName")
         {
             <label>SAM account name@(req)</label>
@@ -118,11 +119,12 @@ else
             @if (f.Naming is { Length: > 0 }) { <div class="hint">Auto from first/last name.</div> }
             else if (key == "displayName") { <div class="hint">CN of the object. Empty → SAM account name.</div> }
         }
+        </div>
     }
 </div>
 }
 
-<div class="btnrow" style="margin-top:16px;max-width:660px">
+<div class="btnrow" style="margin-top:16px;max-width:1080px">
     <button class="primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(sam)">Create user</button>
     <button @onclick='() => Nav.NavigateTo("users")'>Back to users</button>
 </div>
@@ -145,6 +147,11 @@ else
     private string? banner; private bool ok;
     private FieldPermission allowedFields = FieldPermission.All;
     private bool templateLocked;
+
+    // Поля на всю ширину в 2-колоночной форме.
+    private static readonly HashSet<string> WideFieldKeys = new(StringComparer.Ordinal)
+    { "description", "__homeFolder", "__country" };
+    private static bool WideField(string key) => WideFieldKeys.Contains(key);
 
     private TechnicianContext actor = default!;
     private EffectiveAccess access = new(false, new HashSet<Permission>());
